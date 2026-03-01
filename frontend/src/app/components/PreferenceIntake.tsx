@@ -21,8 +21,8 @@ function ButtonGroup<T extends string | number>({
           onClick={() => onChange(opt.value)}
           className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
             value === opt.value
-              ? 'bg-green-600 text-white'
-              : 'bg-gray-100 text-gray-700 hover:bg-green-50 hover:text-green-700 hover:border-green-300 border border-transparent'
+              ? 'bg-emerald-500 text-slate-900'
+              : 'bg-slate-700 text-slate-300 hover:bg-slate-600 hover:text-slate-100'
           }`}
         >
           {opt.label}
@@ -39,29 +39,31 @@ export const PreferenceIntake: React.FC = () => {
   const update = (updates: Partial<HouseRequirements>) =>
     setHouseRequirements({ ...houseRequirements, ...updates });
 
+  const inputClass =
+    'w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500';
+
   return (
     <div className="max-w-4xl mx-auto px-6 py-10">
-      {/* Back + header */}
       <button
         onClick={() => navigate('/priorities')}
-        className="flex items-center gap-2 text-gray-500 hover:text-green-700 transition-colors text-sm font-medium mb-6"
+        className="flex items-center gap-2 text-slate-400 hover:text-emerald-400 transition-colors text-sm font-medium mb-6"
       >
         <ArrowLeft className="w-4 h-4" />
         Back to Priorities
       </button>
 
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">What are you looking for in a home?</h1>
-        <p className="text-gray-500">Tell us about your ideal home so we can find the best matches.</p>
+        <h1 className="text-3xl font-bold text-slate-100 mb-2">What are you looking for in a home?</h1>
+        <p className="text-slate-400">Tell us about your ideal home so we can find the best matches.</p>
       </div>
 
       <div className="space-y-5">
         {/* The Basics */}
-        <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm">
-          <h3 className="text-lg font-semibold text-gray-900 mb-5">The Basics</h3>
+        <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700">
+          <h3 className="text-lg font-semibold text-slate-100 mb-5">The Basics</h3>
           <div className="grid md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">Bedrooms</label>
+              <label className="block text-sm font-medium text-slate-300 mb-3">Bedrooms</label>
               <div className="flex gap-2">
                 {[1, 2, 3, 4, 5].map((n) => (
                   <button
@@ -69,8 +71,8 @@ export const PreferenceIntake: React.FC = () => {
                     onClick={() => update({ bedrooms: n })}
                     className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors ${
                       houseRequirements.bedrooms === n
-                        ? 'bg-green-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-green-50 hover:text-green-700'
+                        ? 'bg-emerald-500 text-slate-900'
+                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                     }`}
                   >
                     {n === 5 ? '5+' : n}
@@ -80,7 +82,7 @@ export const PreferenceIntake: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">Bathrooms</label>
+              <label className="block text-sm font-medium text-slate-300 mb-3">Bathrooms</label>
               <div className="flex gap-2">
                 {[1, 2, 3, 4].map((n) => (
                   <button
@@ -88,8 +90,8 @@ export const PreferenceIntake: React.FC = () => {
                     onClick={() => update({ bathrooms: n })}
                     className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors ${
                       houseRequirements.bathrooms === n
-                        ? 'bg-green-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-green-50 hover:text-green-700'
+                        ? 'bg-emerald-500 text-slate-900'
+                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                     }`}
                   >
                     {n === 4 ? '4+' : n}
@@ -99,7 +101,7 @@ export const PreferenceIntake: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">Property Type</label>
+              <label className="block text-sm font-medium text-slate-300 mb-3">Property Type</label>
               <ButtonGroup
                 options={[
                   { value: 'any' as const, label: 'Any' },
@@ -113,7 +115,7 @@ export const PreferenceIntake: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">Stories</label>
+              <label className="block text-sm font-medium text-slate-300 mb-3">Stories</label>
               <ButtonGroup
                 options={[
                   { value: 0, label: 'Any' },
@@ -129,32 +131,32 @@ export const PreferenceIntake: React.FC = () => {
         </div>
 
         {/* Budget */}
-        <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm">
-          <h3 className="text-lg font-semibold text-gray-900 mb-5">Your Budget</h3>
+        <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700">
+          <h3 className="text-lg font-semibold text-slate-100 mb-5">Your Budget</h3>
           <div className="grid md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Minimum Price</label>
+              <label className="block text-sm font-medium text-slate-300 mb-2">Minimum Price</label>
               <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500">$</span>
                 <input
                   type="number"
                   value={houseRequirements.minPrice}
                   onChange={(e) => update({ minPrice: parseInt(e.target.value) || 0 })}
-                  className="w-full bg-white border border-gray-300 rounded-xl pl-8 pr-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  className={`${inputClass} pl-8`}
                   step={10000}
                   min={0}
                 />
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Maximum Price</label>
+              <label className="block text-sm font-medium text-slate-300 mb-2">Maximum Price</label>
               <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500">$</span>
                 <input
                   type="number"
                   value={houseRequirements.maxPrice}
                   onChange={(e) => update({ maxPrice: parseInt(e.target.value) || 0 })}
-                  className="w-full bg-white border border-gray-300 rounded-xl pl-8 pr-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  className={`${inputClass} pl-8`}
                   step={10000}
                   min={0}
                 />
@@ -164,39 +166,39 @@ export const PreferenceIntake: React.FC = () => {
         </div>
 
         {/* Size & Lot */}
-        <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm">
-          <h3 className="text-lg font-semibold text-gray-900 mb-5">Size & Lot</h3>
+        <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700">
+          <h3 className="text-lg font-semibold text-slate-100 mb-5">Size & Lot</h3>
           <div className="grid md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Min Interior Size</label>
+              <label className="block text-sm font-medium text-slate-300 mb-2">Min Interior Size</label>
               <div className="relative">
                 <input
                   type="number"
                   value={houseRequirements.sqftMin}
                   onChange={(e) => update({ sqftMin: parseInt(e.target.value) || 0 })}
-                  className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 pr-16 text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  className={`${inputClass} pr-16`}
                   step={100}
                   min={0}
                 />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm">sqft</span>
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm">sqft</span>
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Max Interior Size</label>
+              <label className="block text-sm font-medium text-slate-300 mb-2">Max Interior Size</label>
               <div className="relative">
                 <input
                   type="number"
                   value={houseRequirements.sqftMax}
                   onChange={(e) => update({ sqftMax: parseInt(e.target.value) || 0 })}
-                  className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 pr-16 text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  className={`${inputClass} pr-16`}
                   step={100}
                   min={0}
                 />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm">sqft</span>
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm">sqft</span>
               </div>
             </div>
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-3">Lot Size</label>
+              <label className="block text-sm font-medium text-slate-300 mb-3">Lot Size</label>
               <ButtonGroup
                 options={[
                   { value: 'any' as const, label: 'No Preference' },
@@ -212,16 +214,16 @@ export const PreferenceIntake: React.FC = () => {
         </div>
 
         {/* Features & Age */}
-        <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm">
-          <h3 className="text-lg font-semibold text-gray-900 mb-5">Features & Age</h3>
+        <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700">
+          <h3 className="text-lg font-semibold text-slate-100 mb-5">Features & Age</h3>
           <div className="grid md:grid-cols-3 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">Garage</label>
+              <label className="block text-sm font-medium text-slate-300 mb-3">Garage</label>
               <div className="flex gap-2">
                 <button
                   onClick={() => update({ garage: false })}
                   className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                    !houseRequirements.garage ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-green-50'
+                    !houseRequirements.garage ? 'bg-emerald-500 text-slate-900' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                   }`}
                 >
                   Not needed
@@ -229,7 +231,7 @@ export const PreferenceIntake: React.FC = () => {
                 <button
                   onClick={() => update({ garage: true })}
                   className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                    houseRequirements.garage ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-green-50'
+                    houseRequirements.garage ? 'bg-emerald-500 text-slate-900' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                   }`}
                 >
                   Required
@@ -238,12 +240,12 @@ export const PreferenceIntake: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">Pool</label>
+              <label className="block text-sm font-medium text-slate-300 mb-3">Pool</label>
               <div className="flex gap-2">
                 <button
                   onClick={() => update({ pool: false })}
                   className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                    !houseRequirements.pool ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-green-50'
+                    !houseRequirements.pool ? 'bg-emerald-500 text-slate-900' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                   }`}
                 >
                   Not needed
@@ -251,7 +253,7 @@ export const PreferenceIntake: React.FC = () => {
                 <button
                   onClick={() => update({ pool: true })}
                   className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                    houseRequirements.pool ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-green-50'
+                    houseRequirements.pool ? 'bg-emerald-500 text-slate-900' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                   }`}
                 >
                   Required
@@ -260,7 +262,7 @@ export const PreferenceIntake: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">Year Built</label>
+              <label className="block text-sm font-medium text-slate-300 mb-3">Year Built</label>
               <ButtonGroup
                 options={[
                   { value: 'any' as const, label: 'Any' },
@@ -277,11 +279,10 @@ export const PreferenceIntake: React.FC = () => {
         </div>
       </div>
 
-      {/* CTA */}
       <div className="mt-8 flex justify-end">
         <button
           onClick={() => navigate('/neighborhoods')}
-          className="px-10 py-3.5 rounded-full bg-green-600 hover:bg-green-700 text-white font-semibold text-base transition-colors shadow-sm"
+          className="px-10 py-3.5 rounded-full bg-emerald-500 hover:bg-emerald-600 text-slate-900 font-semibold text-base transition-colors shadow-lg shadow-emerald-500/20"
         >
           Find My Neighborhoods →
         </button>

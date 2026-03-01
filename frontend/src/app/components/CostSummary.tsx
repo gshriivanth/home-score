@@ -3,21 +3,20 @@ import { useNavigate } from 'react-router';
 import { usePreferences } from '../context/PreferencesContext';
 import { generateCostProjections, generateLLMSummary } from '../data/mockData';
 import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  BarChart,
-  Bar,
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar,
 } from 'recharts';
 import { ArrowLeft, Home as HomeIcon, TrendingUp, Wrench, DollarSign, RefreshCw } from 'lucide-react';
 
 const fmt = (n: number) =>
   n >= 1000000 ? `$${(n / 1000000).toFixed(2)}M` : `$${(n / 1000).toFixed(0)}K`;
+
+const tooltipStyle = {
+  backgroundColor: '#1e293b',
+  border: '1px solid #334155',
+  borderRadius: '8px',
+  color: '#f1f5f9',
+  fontSize: 12,
+};
 
 export const CostSummary: React.FC = () => {
   const navigate = useNavigate();
@@ -54,14 +53,13 @@ export const CostSummary: React.FC = () => {
     costData.monthlyBreakdown.maintenance;
 
   const monthlyItems = [
-    { label: 'Mortgage (30yr, 20% down)', value: costData.monthlyBreakdown.mortgage, color: '#16a34a' },
-    { label: 'Property Tax', value: costData.monthlyBreakdown.propertyTax, color: '#15803d' },
-    { label: 'Homeowner Insurance', value: costData.monthlyBreakdown.insurance, color: '#22c55e' },
-    { label: 'HOA Fees (est.)', value: costData.monthlyBreakdown.hoa, color: '#4ade80' },
-    { label: 'Maintenance Reserve', value: costData.monthlyBreakdown.maintenance, color: '#86efac' },
+    { label: 'Mortgage (30yr, 20% down)', value: costData.monthlyBreakdown.mortgage, color: '#10b981' },
+    { label: 'Property Tax', value: costData.monthlyBreakdown.propertyTax, color: '#059669' },
+    { label: 'Homeowner Insurance', value: costData.monthlyBreakdown.insurance, color: '#34d399' },
+    { label: 'HOA Fees (est.)', value: costData.monthlyBreakdown.hoa, color: '#6ee7b7' },
+    { label: 'Maintenance Reserve', value: costData.monthlyBreakdown.maintenance, color: '#a7f3d0' },
   ];
 
-  // Simulate streaming text
   useEffect(() => {
     const streamText = async () => {
       const sections = [
@@ -86,60 +84,54 @@ export const CostSummary: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-10">
-      {/* Back + header */}
       <button
         onClick={() => navigate('/listings')}
-        className="flex items-center gap-2 text-gray-500 hover:text-green-700 transition-colors text-sm font-medium mb-6"
+        className="flex items-center gap-2 text-slate-400 hover:text-emerald-400 transition-colors text-sm font-medium mb-6"
       >
         <ArrowLeft className="w-4 h-4" />
         Back to Listings
       </button>
 
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-1">Your Home Analysis</h1>
-        <p className="text-gray-500">
+        <h1 className="text-3xl font-bold text-slate-100 mb-1">Your Home Analysis</h1>
+        <p className="text-slate-400">
           {selectedListing.address}
-          <span className="mx-2 text-gray-300">·</span>
+          <span className="mx-2 text-slate-600">·</span>
           {selectedNeighborhood.name}
-          <span className="ml-2 px-2.5 py-0.5 bg-green-50 text-green-700 text-sm font-semibold rounded-full border border-green-100">
+          <span className="ml-2 px-2.5 py-0.5 bg-emerald-500/10 text-emerald-400 text-sm font-semibold rounded-full border border-emerald-800/50">
             {selectedNeighborhood.matchScore}% match
           </span>
         </p>
       </div>
 
-      {/* Current price banner */}
-      <div className="bg-green-600 rounded-2xl p-6 mb-8 flex flex-wrap items-center gap-6">
+      {/* Price banner */}
+      <div className="bg-emerald-600/20 border border-emerald-700/50 rounded-2xl p-6 mb-8 flex flex-wrap items-center gap-6">
         <div>
-          <div className="text-green-200 text-sm font-medium mb-1">Current Asking Price</div>
-          <div className="text-5xl font-bold text-white">{fmt(selectedListing.price)}</div>
+          <div className="text-emerald-400 text-sm font-medium mb-1">Current Asking Price</div>
+          <div className="text-5xl font-bold text-slate-100">{fmt(selectedListing.price)}</div>
         </div>
-        <div className="h-12 w-px bg-green-500 hidden sm:block" />
-        <div className="flex gap-8 text-white flex-wrap">
-          <div>
-            <div className="text-green-200 text-xs mb-1">Bedrooms</div>
-            <div className="font-bold text-lg">{selectedListing.bedrooms}</div>
-          </div>
-          <div>
-            <div className="text-green-200 text-xs mb-1">Bathrooms</div>
-            <div className="font-bold text-lg">{selectedListing.bathrooms}</div>
-          </div>
-          <div>
-            <div className="text-green-200 text-xs mb-1">Square Feet</div>
-            <div className="font-bold text-lg">{selectedListing.sqft.toLocaleString()}</div>
-          </div>
-          <div>
-            <div className="text-green-200 text-xs mb-1">Price per sqft</div>
-            <div className="font-bold text-lg">${Math.round(selectedListing.price / selectedListing.sqft)}</div>
-          </div>
+        <div className="h-12 w-px bg-emerald-800/50 hidden sm:block" />
+        <div className="flex gap-8 flex-wrap">
+          {[
+            ['Bedrooms', selectedListing.bedrooms],
+            ['Bathrooms', selectedListing.bathrooms],
+            ['Square Feet', selectedListing.sqft.toLocaleString()],
+            ['Price / sqft', `$${Math.round(selectedListing.price / selectedListing.sqft)}`],
+          ].map(([label, val]) => (
+            <div key={label}>
+              <div className="text-emerald-600 text-xs mb-1">{label}</div>
+              <div className="font-bold text-lg text-slate-100">{val}</div>
+            </div>
+          ))}
         </div>
       </div>
 
       <div className="grid lg:grid-cols-2 gap-8">
         {/* Left: charts */}
         <div className="space-y-6">
-          {/* Chart tabs */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="flex border-b border-gray-100">
+          <div className="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden">
+            {/* Tabs */}
+            <div className="flex border-b border-slate-700">
               {([
                 ['future', 'Future Value', TrendingUp],
                 ['maintenance', 'Maintenance', Wrench],
@@ -150,8 +142,8 @@ export const CostSummary: React.FC = () => {
                   onClick={() => setActiveTab(tab)}
                   className={`flex-1 flex items-center justify-center gap-2 py-3.5 text-sm font-medium transition-colors ${
                     activeTab === tab
-                      ? 'text-green-700 border-b-2 border-green-600 bg-green-50'
-                      : 'text-gray-500 hover:text-gray-700'
+                      ? 'text-emerald-400 border-b-2 border-emerald-500 bg-emerald-500/5'
+                      : 'text-slate-500 hover:text-slate-300'
                   }`}
                 >
                   <Icon className="w-4 h-4" />
@@ -163,70 +155,56 @@ export const CostSummary: React.FC = () => {
             <div className="p-6">
               {activeTab === 'future' && (
                 <>
-                  <h3 className="font-semibold text-gray-900 mb-4">
-                    Home Value Projection — Best, Expected & Worst Case
-                  </h3>
+                  <h3 className="font-semibold text-slate-100 mb-4">Home Value Projection</h3>
                   <ResponsiveContainer width="100%" height={260}>
                     <AreaChart data={futurePriceChart}>
                       <defs>
                         <linearGradient id="gradBest" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#16a34a" stopOpacity={0.2} />
-                          <stop offset="95%" stopColor="#16a34a" stopOpacity={0} />
+                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
                         </linearGradient>
                         <linearGradient id="gradWorst" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#ef4444" stopOpacity={0.15} />
-                          <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                          <stop offset="5%" stopColor="#f87171" stopOpacity={0.2} />
+                          <stop offset="95%" stopColor="#f87171" stopOpacity={0} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-                      <XAxis dataKey="year" tick={{ fontSize: 12 }} stroke="#d1d5db" />
-                      <YAxis tick={{ fontSize: 11 }} stroke="#d1d5db" tickFormatter={(v) => fmt(v as number)} />
-                      <Tooltip
-                        contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 12 }}
-                        formatter={(v: number) => fmt(v)}
-                      />
-                      <Legend wrapperStyle={{ fontSize: 12 }} />
-                      <Area type="monotone" dataKey="Best Case" stroke="#16a34a" fill="url(#gradBest)" strokeWidth={2} />
-                      <Area type="monotone" dataKey="Expected" stroke="#6366f1" fill="none" strokeWidth={2} strokeDasharray="5 3" />
-                      <Area type="monotone" dataKey="Worst Case" stroke="#ef4444" fill="url(#gradWorst)" strokeWidth={2} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                      <XAxis dataKey="year" tick={{ fontSize: 12, fill: '#94a3b8' }} stroke="#334155" />
+                      <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} stroke="#334155" tickFormatter={(v) => fmt(v as number)} />
+                      <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => fmt(v)} />
+                      <Legend wrapperStyle={{ fontSize: 12, color: '#94a3b8' }} />
+                      <Area type="monotone" dataKey="Best Case" stroke="#10b981" fill="url(#gradBest)" strokeWidth={2} />
+                      <Area type="monotone" dataKey="Expected" stroke="#818cf8" fill="none" strokeWidth={2} strokeDasharray="5 3" />
+                      <Area type="monotone" dataKey="Worst Case" stroke="#f87171" fill="url(#gradWorst)" strokeWidth={2} />
                     </AreaChart>
                   </ResponsiveContainer>
-                  <p className="text-xs text-gray-400 mt-3 text-center">
-                    Placeholder projections — will reflect real market data once backend is connected
-                  </p>
+                  <p className="text-xs text-slate-600 mt-3 text-center">Placeholder — will use live market data once backend connected</p>
                 </>
               )}
 
               {activeTab === 'maintenance' && (
                 <>
-                  <h3 className="font-semibold text-gray-900 mb-4">Cumulative Maintenance Costs Over Time</h3>
+                  <h3 className="font-semibold text-slate-100 mb-4">Cumulative Maintenance Costs</h3>
                   <ResponsiveContainer width="100%" height={260}>
                     <BarChart data={maintenanceChart}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-                      <XAxis dataKey="year" tick={{ fontSize: 12 }} stroke="#d1d5db" />
-                      <YAxis tick={{ fontSize: 11 }} stroke="#d1d5db" tickFormatter={(v) => fmt(v as number)} />
-                      <Tooltip
-                        contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 12 }}
-                        formatter={(v: number) => fmt(v)}
-                      />
-                      <Bar dataKey="Maintenance" fill="#16a34a" radius={[4, 4, 0, 0]} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                      <XAxis dataKey="year" tick={{ fontSize: 12, fill: '#94a3b8' }} stroke="#334155" />
+                      <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} stroke="#334155" tickFormatter={(v) => fmt(v as number)} />
+                      <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => fmt(v)} />
+                      <Bar dataKey="Maintenance" fill="#10b981" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
-
-                  {/* Breakdown table for year 10 */}
-                  <div className="mt-4 border-t border-gray-100 pt-4">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">10-Year Breakdown</p>
-                    <div className="space-y-2">
-                      {Object.entries(costData.maintenanceCosts[3].breakdown).map(([key, val]) => (
-                        <div key={key} className="flex justify-between text-sm">
-                          <span className="text-gray-600">{key}</span>
-                          <span className="font-semibold text-gray-900">{fmt(val)}</span>
-                        </div>
-                      ))}
-                      <div className="flex justify-between text-sm pt-2 border-t border-gray-100 font-bold">
-                        <span className="text-gray-900">Total (10 years)</span>
-                        <span className="text-green-600">{fmt(costData.maintenanceCosts[3].cumulative)}</span>
+                  <div className="mt-4 border-t border-slate-700 pt-4 space-y-2">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">10-Year Breakdown</p>
+                    {Object.entries(costData.maintenanceCosts[3].breakdown).map(([key, val]) => (
+                      <div key={key} className="flex justify-between text-sm">
+                        <span className="text-slate-400">{key}</span>
+                        <span className="font-semibold text-slate-200">{fmt(val)}</span>
                       </div>
+                    ))}
+                    <div className="flex justify-between text-sm pt-2 border-t border-slate-700 font-bold">
+                      <span className="text-slate-200">Total (10 years)</span>
+                      <span className="text-emerald-400">{fmt(costData.maintenanceCosts[3].cumulative)}</span>
                     </div>
                   </div>
                 </>
@@ -234,31 +212,28 @@ export const CostSummary: React.FC = () => {
 
               {activeTab === 'monthly' && (
                 <>
-                  <h3 className="font-semibold text-gray-900 mb-1">Monthly Cost Breakdown</h3>
-                  <div className="text-3xl font-bold text-green-600 mb-5">
-                    ${totalMonthly.toLocaleString()}<span className="text-base text-gray-400 font-normal">/mo</span>
+                  <h3 className="font-semibold text-slate-100 mb-1">Monthly Cost Breakdown</h3>
+                  <div className="text-3xl font-bold text-emerald-400 mb-5">
+                    ${totalMonthly.toLocaleString()}<span className="text-base text-slate-500 font-normal">/mo</span>
                   </div>
                   <div className="space-y-3">
                     {monthlyItems.map((item) => (
                       <div key={item.label}>
                         <div className="flex justify-between text-sm mb-1">
-                          <span className="text-gray-600">{item.label}</span>
-                          <span className="font-semibold text-gray-900">${item.value.toLocaleString()}</span>
+                          <span className="text-slate-400">{item.label}</span>
+                          <span className="font-semibold text-slate-200">${item.value.toLocaleString()}</span>
                         </div>
-                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
                           <div
-                            className="h-full rounded-full transition-all"
-                            style={{
-                              width: `${(item.value / totalMonthly) * 100}%`,
-                              backgroundColor: item.color,
-                            }}
+                            className="h-full rounded-full"
+                            style={{ width: `${(item.value / totalMonthly) * 100}%`, backgroundColor: item.color }}
                           />
                         </div>
                       </div>
                     ))}
                   </div>
-                  <p className="text-xs text-gray-400 mt-4 text-center">
-                    Assumes 20% down payment at 7% interest rate · Actual rates may vary
+                  <p className="text-xs text-slate-600 mt-4 text-center">
+                    Assumes 20% down at 7% interest · Actual rates may vary
                   </p>
                 </>
               )}
@@ -268,64 +243,42 @@ export const CostSummary: React.FC = () => {
 
         {/* Right: AI summary */}
         <div className="space-y-5">
-          {/* Neighborhood match */}
-          <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-9 h-9 rounded-xl bg-green-50 flex items-center justify-center">
-                <HomeIcon className="w-5 h-5 text-green-600" />
-              </div>
-              <h3 className="font-semibold text-gray-900">Neighborhood Match</h3>
-              {isStreaming && streamedText.neighborhood.length === 0 && (
-                <div className="ml-auto flex gap-1">
-                  <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+          {[
+            { key: 'neighborhood' as const, label: 'Neighborhood Match', Icon: HomeIcon, text: streamedText.neighborhood, full: summary.neighborhoodMatch },
+            { key: 'house' as const, label: 'Home Fit', Icon: TrendingUp, text: streamedText.house, full: summary.houseFit },
+            { key: 'costs' as const, label: 'Future Costs', Icon: Wrench, text: streamedText.costs, full: summary.futureCosts },
+          ].map(({ key, label, Icon, text, full }) => (
+            <div key={key} className="bg-slate-800 rounded-2xl p-6 border border-slate-700">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                  <Icon className="w-5 h-5 text-emerald-500" />
                 </div>
-              )}
-            </div>
-            <p className="text-gray-600 text-sm leading-relaxed">
-              {streamedText.neighborhood}{cursor(streamedText.neighborhood, summary.neighborhoodMatch)}
-            </p>
-          </div>
-
-          {/* House fit */}
-          <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-9 h-9 rounded-xl bg-green-50 flex items-center justify-center">
-                <TrendingUp className="w-5 h-5 text-green-600" />
+                <h3 className="font-semibold text-slate-100">{label}</h3>
+                {isStreaming && text.length === 0 && key === 'neighborhood' && (
+                  <div className="ml-auto flex gap-1">
+                    {[0, 150, 300].map((delay) => (
+                      <div key={delay} className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: `${delay}ms` }} />
+                    ))}
+                  </div>
+                )}
               </div>
-              <h3 className="font-semibold text-gray-900">Home Fit</h3>
+              <p className="text-slate-400 text-sm leading-relaxed">
+                {text}{cursor(text, full)}
+              </p>
             </div>
-            <p className="text-gray-600 text-sm leading-relaxed">
-              {streamedText.house}{cursor(streamedText.house, summary.houseFit)}
-            </p>
-          </div>
+          ))}
 
-          {/* Future costs */}
-          <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-9 h-9 rounded-xl bg-green-50 flex items-center justify-center">
-                <Wrench className="w-5 h-5 text-green-600" />
-              </div>
-              <h3 className="font-semibold text-gray-900">Future Costs</h3>
-            </div>
-            <p className="text-gray-600 text-sm leading-relaxed">
-              {streamedText.costs}{cursor(streamedText.costs, summary.futureCosts)}
-            </p>
-          </div>
-
-          {/* Actions */}
           <div className="flex gap-3">
             <button
               onClick={() => navigate('/')}
-              className="flex-1 py-3.5 rounded-xl border-2 border-green-200 text-green-700 font-semibold hover:bg-green-50 transition-colors flex items-center justify-center gap-2"
+              className="flex-1 py-3.5 rounded-xl border border-emerald-800/50 text-emerald-400 font-semibold hover:bg-emerald-500/10 transition-colors flex items-center justify-center gap-2"
             >
               <RefreshCw className="w-4 h-4" />
               New Search
             </button>
             <button
               onClick={() => navigate('/listings')}
-              className="flex-1 py-3.5 rounded-xl bg-green-600 hover:bg-green-700 text-white font-semibold transition-colors"
+              className="flex-1 py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-900 font-semibold transition-colors shadow-lg shadow-emerald-500/20"
             >
               Back to Listings
             </button>
