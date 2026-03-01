@@ -463,11 +463,10 @@ class ListingRequest(BaseModel):
 
 
 @app.post("/listings", tags=["listings"])
-async def get_listing(req: ListingRequest) -> Dict:
+async def get_listing(req: ListingRequest) -> List[Dict]:
     """
-    Generate a single realistic home listing for the given ZIP code using
-    the Gemini + Redfin scraping pipeline. Gemini finds an active listing URL
-    via Google Search, then the page is scraped for property details.
+    Return up to 5 active for-sale listings for the given ZIP code
+    scraped from Redfin.
     """
     gemini_key = os.getenv("GEMINI_API_KEY", "")
     if not gemini_key:
@@ -491,7 +490,7 @@ async def get_listing(req: ListingRequest) -> Dict:
             pool=req.pool,
             year_built=req.year_built,
         )
-        return listings[0] if listings else {}
+        return listings
     except ValueError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except Exception as exc:

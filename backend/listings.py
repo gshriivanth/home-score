@@ -467,6 +467,14 @@ def _extract_from_ld_json(soup: BeautifulSoup) -> list[dict]:
                     
                     if "numberOfRooms" in item:
                         entry["bedrooms"] = _safe_int(str(item["numberOfRooms"]))
+
+                    # Extract bathrooms from schema.org properties
+                    if "numberOfBathroomsTotal" in item:
+                        entry["bathrooms"] = _safe_float(str(item["numberOfBathroomsTotal"]))
+                    elif "numberOfFullBathrooms" in item:
+                        full = _safe_float(str(item["numberOfFullBathrooms"])) or 0
+                        half = _safe_float(str(item.get("numberOfPartialBathrooms", 0))) or 0
+                        entry["bathrooms"] = full + half
                         
                     if "floorSize" in item and isinstance(item["floorSize"], dict):
                         entry["sqft"] = _safe_int(str(item["floorSize"].get("value")))
@@ -487,13 +495,15 @@ def _extract_from_ld_json(soup: BeautifulSoup) -> list[dict]:
     return valid_listings
 
 
-async def _scrape_listing_detail_image(url: str) -> Optional[str]:
+async def _scrape_listing_detail(url: str) -> dict:
     """
-    Scrape the first/main image from a Redfin listing detail page.
-    Returns the image URL or None if not found.
+    Scrape a Redfin listing detail page for the hero image AND property details
+    (bathrooms, bedrooms, sqft, yearBuilt) that may be missing from search results.
+    Returns a dict like: {"imageUrl": "...", "bathrooms": 3.5, "bedrooms": 4, ...}
     """
+    result: dict = {}
     if not url or not url.startswith("http"):
-        return None
+        return result
 
     try:
         async with httpx.AsyncClient(
@@ -504,75 +514,139 @@ async def _scrape_listing_detail_image(url: str) -> Optional[str]:
             resp = await client.get(url)
 
         if resp.status_code != 200:
-            return None
+            return result
 
         soup = BeautifulSoup(resp.text, "html.parser")
 
-        # Strategy 1: Look for the main hero image
-        hero_img = soup.select_one("img[class*='hero'], img[class*='Hero'], img[data-rf-test-name='hero-image']")
-        if hero_img and hero_img.get("src"):
-            src = hero_img["src"]
-            if src.startswith("http"):
-                return src
-
-        # Strategy 2: Look for carousel/slider first image
-        carousel_img = soup.select_one(
-            "div[class*='carousel'] img, "
-            "div[class*='Carousel'] img, "
-            "div[class*='slider'] img, "
-            "div[class*='gallery'] img:first-child"
-        )
-        if carousel_img and carousel_img.get("src"):
-            src = carousel_img["src"]
-            if src.startswith("http"):
-                return src
-
-        # Strategy 3: Look for meta tags with property images
-        og_image = soup.select_one("meta[property='og:image']")
-        if og_image and og_image.get("content"):
-            content = og_image["content"]
-            if content.startswith("http"):
-                return content
-
-        # Strategy 4: Any large image with 'photo' or 'listing' in the src/class
-        photo_img = soup.select_one(
-            "img[src*='ssl.cdn-redfin.com'], "
-            "img[src*='photo'], "
-            "img[class*='photo'], "
-            "img[class*='listing']"
-        )
-        if photo_img and photo_img.get("src"):
-            src = photo_img["src"]
-            if src.startswith("http"):
-                return src
-
-        # Strategy 5: Parse JSON-LD for image
+        # ── Extract property details from LD+JSON ──────────────────────────
         scripts = soup.find_all('script', type='application/ld+json')
         for script in scripts:
             if not script.string:
                 continue
             try:
-                data = json.loads(script.string)
-                if isinstance(data, list):
-                    data = data[0] if data else {}
-                if isinstance(data, dict):
-                    img = data.get("image")
-                    if isinstance(img, str) and img.startswith("http"):
-                        return img
-                    elif isinstance(img, list) and img:
-                        first = img[0]
-                        if isinstance(first, str) and first.startswith("http"):
-                            return first
-                        elif isinstance(first, dict) and first.get("url"):
-                            return first["url"]
+                items = json.loads(script.string)
+                if not isinstance(items, list):
+                    items = [items]
+                for item in items:
+                    if not isinstance(item, dict):
+                        continue
+                    typ = item.get("@type", "")
+                    if typ in ("SingleFamilyResidence", "Residence", "House", "Apartment"):
+                        if "numberOfBathroomsTotal" in item and "bathrooms" not in result:
+                            result["bathrooms"] = _safe_float(str(item["numberOfBathroomsTotal"]))
+                        if "numberOfFullBathrooms" in item and "bathrooms" not in result:
+                            full = _safe_float(str(item["numberOfFullBathrooms"])) or 0
+                            half = _safe_float(str(item.get("numberOfPartialBathrooms", 0))) or 0
+                            result["bathrooms"] = full + half
+                        if "numberOfRooms" in item and "bedrooms" not in result:
+                            result["bedrooms"] = _safe_int(str(item["numberOfRooms"]))
+                        if "floorSize" in item and isinstance(item["floorSize"], dict) and "sqft" not in result:
+                            result["sqft"] = _safe_int(str(item["floorSize"].get("value")))
+                        if "yearBuilt" in item and "yearBuilt" not in result:
+                            result["yearBuilt"] = _safe_int(str(item["yearBuilt"]))
+                    # Also grab image from LD+JSON
+                    if "imageUrl" not in result:
+                        img = item.get("image")
+                        if isinstance(img, str) and img.startswith("http"):
+                            result["imageUrl"] = img
+                        elif isinstance(img, list) and img:
+                            first = img[0]
+                            if isinstance(first, str) and first.startswith("http"):
+                                result["imageUrl"] = first
+                            elif isinstance(first, dict) and first.get("url"):
+                                result["imageUrl"] = first["url"]
             except (json.JSONDecodeError, Exception):
                 continue
 
-    except Exception as e:
-        print(f"[SCRAPE] Failed to fetch detail image from {url}: {e}")
-        return None
+        # ── Extract bathrooms from HTML stats (fallback) ───────────────────
+        if "bathrooms" not in result:
+            for el in soup.select("[class*='stat'], [class*='Stat'], [data-rf-test-id*='bath']"):
+                txt = el.get_text(strip=True).lower()
+                m = re.search(r"([\d.]+)\s*(?:bath|ba\b)", txt)
+                if m:
+                    result["bathrooms"] = _safe_float(m.group(1))
+                    break
 
-    return None
+        # ── Extract hero image (existing strategies) ───────────────────────
+        if "imageUrl" not in result:
+            # Strategy 1: Hero image
+            hero_img = soup.select_one("img[class*='hero'], img[class*='Hero'], img[data-rf-test-name='hero-image']")
+            if hero_img and hero_img.get("src"):
+                src = hero_img["src"]
+                if src.startswith("http"):
+                    result["imageUrl"] = src
+
+        if "imageUrl" not in result:
+            # Strategy 2: Carousel/slider first image
+            carousel_img = soup.select_one(
+                "div[class*='carousel'] img, "
+                "div[class*='Carousel'] img, "
+                "div[class*='slider'] img, "
+                "div[class*='gallery'] img:first-child"
+            )
+            if carousel_img and carousel_img.get("src"):
+                src = carousel_img["src"]
+                if src.startswith("http"):
+                    result["imageUrl"] = src
+
+        if "imageUrl" not in result:
+            # Strategy 3: og:image meta tag
+            og_image = soup.select_one("meta[property='og:image']")
+            if og_image and og_image.get("content"):
+                content = og_image["content"]
+                if content.startswith("http"):
+                    result["imageUrl"] = content
+
+        if "imageUrl" not in result:
+            # Strategy 4: Any photo-like image
+            photo_img = soup.select_one(
+                "img[src*='ssl.cdn-redfin.com'], "
+                "img[src*='photo'], "
+                "img[class*='photo'], "
+                "img[class*='listing']"
+            )
+            if photo_img and photo_img.get("src"):
+                src = photo_img["src"]
+                if src.startswith("http"):
+                    result["imageUrl"] = src
+
+    except Exception as e:
+        print(f"[SCRAPE] Failed to fetch detail from {url}: {e}")
+
+    if result:
+        print(f"[SCRAPE] Detail page {url[-40:]}: baths={result.get('bathrooms')}, beds={result.get('bedrooms')}, img={'yes' if result.get('imageUrl') else 'no'}")
+
+    return result
+
+
+def _merge_supplementary_data(primary: list[dict], supplementary: list[dict]) -> None:
+    """
+    Fill in missing fields in primary listings using data from supplementary listings.
+    Matches by normalised address (case-insensitive substring match).
+    Modifies primary in place.
+    """
+    # Build a lookup from normalised address fragments → supplementary entry
+    sup_by_addr: list[tuple[str, dict]] = []
+    for s in supplementary:
+        addr = (s.get("address") or "").strip().lower()
+        if addr:
+            sup_by_addr.append((addr, s))
+
+    fill_keys = ["bathrooms", "bedrooms", "sqft", "imageUrl"]
+
+    for listing in primary:
+        addr = (listing.get("address") or "").strip().lower()
+        if not addr:
+            continue
+
+        # Try to find a matching supplementary entry
+        for sup_addr, sup in sup_by_addr:
+            # Match if either address contains the other (handles partial vs full addresses)
+            if sup_addr in addr or addr in sup_addr:
+                for key in fill_keys:
+                    if listing.get(key) is None and sup.get(key) is not None:
+                        listing[key] = sup[key]
+                break
 
 
 async def _scrape_search_results(url: str) -> list[dict]:
@@ -591,12 +665,31 @@ async def _scrape_search_results(url: str) -> list[dict]:
 
     # Try strategies in order, stop at first that yields results
     listings = _extract_from_ld_json(soup)
+    if listings:
+        print(f"[SCRAPE] LD+JSON found {len(listings)} listings")
+        for i, l in enumerate(listings[:3]):
+            print(f"  [{i}] addr={l.get('address', '?')[:40]}, baths={l.get('bathrooms')}, beds={l.get('bedrooms')}")
     if not listings:
         listings = _extract_from_script_json(soup)
+        if listings:
+            print(f"[SCRAPE] Script JSON found {len(listings)} listings")
     if not listings:
         listings = _extract_from_window_assignment(soup)
     if not listings:
         listings = _extract_from_html_cards(soup)
+
+    # Always parse HTML cards as a supplementary pass to fill in missing
+    # fields (especially bathrooms, which LD+JSON often omits)
+    if listings:
+        html_cards = _extract_from_html_cards(soup)
+        if html_cards:
+            print(f"[SCRAPE] HTML cards found {len(html_cards)} supplementary entries")
+            for i, c in enumerate(html_cards[:3]):
+                print(f"  [{i}] addr={c.get('address', '?')[:40]}, baths={c.get('bathrooms')}, beds={c.get('bedrooms')}")
+            _merge_supplementary_data(listings, html_cards)
+            print(f"[SCRAPE] After merge:")
+            for i, l in enumerate(listings[:3]):
+                print(f"  [{i}] addr={l.get('address', '?')[:40]}, baths={l.get('bathrooms')}, beds={l.get('bedrooms')}")
 
     return listings
 
@@ -731,8 +824,9 @@ async def generate_listings(
             "_raw": d,  # Keep raw data for image enhancement
         })
 
-    # Enhance images by scraping detail pages (parallel)
-    print(f"[SCRAPE] Enhancing {len(results)} listings with detail page images...")
+    # Enhance listings by scraping detail pages (parallel) — fills in
+    # images AND missing property data (bathrooms, bedrooms, sqft, yearBuilt)
+    print(f"[SCRAPE] Enhancing {len(results)} listings with detail page data...")
 
     # Collect URLs to scrape and their indices
     urls_to_scrape: list[tuple[int, str]] = []
@@ -744,19 +838,38 @@ async def generate_listings(
 
     # Scrape all detail pages in parallel
     if urls_to_scrape:
-        scrape_tasks = [_scrape_listing_detail_image(url) for _, url in urls_to_scrape]
-        detail_images = await asyncio.gather(*scrape_tasks, return_exceptions=True)
+        scrape_tasks = [_scrape_listing_detail(url) for _, url in urls_to_scrape]
+        detail_results = await asyncio.gather(*scrape_tasks, return_exceptions=True)
 
-        # Update results with detail images where available
-        for (idx, url), detail_img in zip(urls_to_scrape, detail_images):
-            if isinstance(detail_img, Exception):
-                print(f"[SCRAPE] Error fetching detail image for listing {idx}: {detail_img}")
-            elif detail_img:
-                print(f"[SCRAPE] Found detail image for listing {idx}: {detail_img[:80]}...")
-                results[idx]["imageUrl"] = detail_img
-            elif not results[idx]["_raw"].get("imageUrl"):
-                # Keep stock image as fallback
-                print(f"[SCRAPE] No detail image found for listing {idx}, using stock image")
+        # Update results with detail data where available
+        for (idx, url), detail in zip(urls_to_scrape, detail_results):
+            if isinstance(detail, Exception):
+                print(f"[SCRAPE] Error fetching detail for listing {idx}: {detail}")
+                continue
+            if not detail:
+                continue
+
+            # Fill in image
+            if detail.get("imageUrl"):
+                print(f"[SCRAPE] Found detail image for listing {idx}: {detail['imageUrl'][:80]}...")
+                results[idx]["imageUrl"] = detail["imageUrl"]
+
+            # Fill in missing property data from detail page
+            if detail.get("bathrooms") is not None:
+                results[idx]["bathrooms"] = detail["bathrooms"]
+            if detail.get("bedrooms") is not None and results[idx].get("bedrooms") == bedrooms:
+                # Only override if current value is the user-requirement fallback
+                results[idx]["bedrooms"] = detail["bedrooms"]
+            if detail.get("sqft") is not None and results[idx].get("sqft") == ((sqft_min + sqft_max) // 2):
+                results[idx]["sqft"] = detail["sqft"]
+            if detail.get("yearBuilt") is not None and results[idx].get("yearBuilt") is None:
+                results[idx]["yearBuilt"] = detail["yearBuilt"]
+
+            # Update description with real bathroom count
+            results[idx]["description"] = (
+                f"{results[idx]['bedrooms']}bd/"
+                f"{results[idx]['bathrooms']}ba in {city}, {state}"
+            )
 
     # Clean up raw data
     for result in results:

@@ -162,7 +162,7 @@ export interface GeminiListing {
   source?: string;
 }
 
-export async function getListing(
+export async function getListings(
   zipCode: string,
   city: string,
   state: string,
@@ -176,7 +176,7 @@ export async function getListing(
   garage: boolean,
   pool: boolean,
   yearBuilt: string,
-): Promise<GeminiListing> {
+): Promise<GeminiListing[]> {
   const response = await fetch(`${BASE_URL}/listings`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -202,7 +202,7 @@ export async function getListing(
     throw new Error(`Listings API ${response.status}: ${text}`);
   }
 
-  return response.json() as Promise<GeminiListing>;
+  return response.json() as Promise<GeminiListing[]>;
 }
 
 
