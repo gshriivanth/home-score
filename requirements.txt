@@ -1,0 +1,28 @@
+# HomeScore Backend Dependencies
+# Install with: pip install -r requirements.txt
+
+# --- Web Framework ---
+fastapi==0.115.12
+uvicorn[standard]==0.34.0
+
+# --- Data & ML ---
+pandas==2.2.3
+numpy==2.2.4
+scikit-learn==1.6.1
+
+# --- HTTP & APIs ---
+httpx==0.28.1
+requests==2.32.3
+
+# --- Environment & Config ---
+python-dotenv==1.1.0
+pydantic==2.11.1
+pydantic-settings==2.8.1
+
+# --- Database (placeholder — swap for your DB of choice) ---
+sqlalchemy==2.0.40
+alembic==1.15.2
+
+# --- Dev / Testing ---
+pytest==8.3.5
+pytest-asyncio==0.26.0
