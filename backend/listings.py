@@ -11,6 +11,7 @@ Pipeline:
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import time as _time
@@ -486,6 +487,94 @@ def _extract_from_ld_json(soup: BeautifulSoup) -> list[dict]:
     return valid_listings
 
 
+async def _scrape_listing_detail_image(url: str) -> Optional[str]:
+    """
+    Scrape the first/main image from a Redfin listing detail page.
+    Returns the image URL or None if not found.
+    """
+    if not url or not url.startswith("http"):
+        return None
+
+    try:
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(15.0),
+            follow_redirects=True,
+            headers=_SCRAPE_HEADERS,
+        ) as client:
+            resp = await client.get(url)
+
+        if resp.status_code != 200:
+            return None
+
+        soup = BeautifulSoup(resp.text, "html.parser")
+
+        # Strategy 1: Look for the main hero image
+        hero_img = soup.select_one("img[class*='hero'], img[class*='Hero'], img[data-rf-test-name='hero-image']")
+        if hero_img and hero_img.get("src"):
+            src = hero_img["src"]
+            if src.startswith("http"):
+                return src
+
+        # Strategy 2: Look for carousel/slider first image
+        carousel_img = soup.select_one(
+            "div[class*='carousel'] img, "
+            "div[class*='Carousel'] img, "
+            "div[class*='slider'] img, "
+            "div[class*='gallery'] img:first-child"
+        )
+        if carousel_img and carousel_img.get("src"):
+            src = carousel_img["src"]
+            if src.startswith("http"):
+                return src
+
+        # Strategy 3: Look for meta tags with property images
+        og_image = soup.select_one("meta[property='og:image']")
+        if og_image and og_image.get("content"):
+            content = og_image["content"]
+            if content.startswith("http"):
+                return content
+
+        # Strategy 4: Any large image with 'photo' or 'listing' in the src/class
+        photo_img = soup.select_one(
+            "img[src*='ssl.cdn-redfin.com'], "
+            "img[src*='photo'], "
+            "img[class*='photo'], "
+            "img[class*='listing']"
+        )
+        if photo_img and photo_img.get("src"):
+            src = photo_img["src"]
+            if src.startswith("http"):
+                return src
+
+        # Strategy 5: Parse JSON-LD for image
+        scripts = soup.find_all('script', type='application/ld+json')
+        for script in scripts:
+            if not script.string:
+                continue
+            try:
+                data = json.loads(script.string)
+                if isinstance(data, list):
+                    data = data[0] if data else {}
+                if isinstance(data, dict):
+                    img = data.get("image")
+                    if isinstance(img, str) and img.startswith("http"):
+                        return img
+                    elif isinstance(img, list) and img:
+                        first = img[0]
+                        if isinstance(first, str) and first.startswith("http"):
+                            return first
+                        elif isinstance(first, dict) and first.get("url"):
+                            return first["url"]
+            except (json.JSONDecodeError, Exception):
+                continue
+
+    except Exception as e:
+        print(f"[SCRAPE] Failed to fetch detail image from {url}: {e}")
+        return None
+
+    return None
+
+
 async def _scrape_search_results(url: str) -> list[dict]:
     """Fetch a Redfin search page and extract listings using 4 strategies."""
     async with httpx.AsyncClient(
@@ -616,6 +705,7 @@ async def generate_listings(
 
     price_mid = (min_price + max_price) // 2
 
+    # Build base results
     results: list[dict] = []
     for i, d in enumerate(filtered):
         results.append({
@@ -638,7 +728,39 @@ async def generate_listings(
             ),
             "source": "redfin",
             "scraped": True,
+            "_raw": d,  # Keep raw data for image enhancement
         })
+
+    # Enhance images by scraping detail pages (parallel)
+    print(f"[SCRAPE] Enhancing {len(results)} listings with detail page images...")
+
+    # Collect URLs to scrape and their indices
+    urls_to_scrape: list[tuple[int, str]] = []
+    for i, result in enumerate(results):
+        redfin_url = result["redfinUrl"]
+        # Only scrape detail pages that have real Redfin URLs (not the search URL)
+        if redfin_url and redfin_url != search_url and "/home/" in redfin_url:
+            urls_to_scrape.append((i, redfin_url))
+
+    # Scrape all detail pages in parallel
+    if urls_to_scrape:
+        scrape_tasks = [_scrape_listing_detail_image(url) for _, url in urls_to_scrape]
+        detail_images = await asyncio.gather(*scrape_tasks, return_exceptions=True)
+
+        # Update results with detail images where available
+        for (idx, url), detail_img in zip(urls_to_scrape, detail_images):
+            if isinstance(detail_img, Exception):
+                print(f"[SCRAPE] Error fetching detail image for listing {idx}: {detail_img}")
+            elif detail_img:
+                print(f"[SCRAPE] Found detail image for listing {idx}: {detail_img[:80]}...")
+                results[idx]["imageUrl"] = detail_img
+            elif not results[idx]["_raw"].get("imageUrl"):
+                # Keep stock image as fallback
+                print(f"[SCRAPE] No detail image found for listing {idx}, using stock image")
+
+    # Clean up raw data
+    for result in results:
+        result.pop("_raw", None)
 
     # If nothing survived filtering, raise so the caller knows
     if not results:

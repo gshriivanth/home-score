@@ -113,3 +113,49 @@ class RankNeighborhoodsResponse(BaseModel):
     total_zips_scored: int
     neighborhoods: List[NeighborhoodResult]
     warnings: List[str]
+
+
+# ---------------------------------------------------------------------------
+# Appreciation prediction models
+# ---------------------------------------------------------------------------
+
+class ScenarioResult(BaseModel):
+    """Result for one scenario (best/avg/worst)."""
+    appreciation_pct: float
+    projected_value: Optional[int]
+
+
+class HorizonProjection(BaseModel):
+    """Projections for one time horizon (6, 12, or 36 months)."""
+    months: int
+    best: ScenarioResult
+    avg: ScenarioResult
+    worst: ScenarioResult
+
+
+class AppreciationPredictionRequest(BaseModel):
+    """Request body for POST /predict-appreciation."""
+    # Required listing fields
+    price: int
+    sqft: int
+    bedrooms: int
+    bathrooms: float
+    yearBuilt: int
+    propertyType: str
+    zip: str
+    state: str
+
+    # Optional listing fields
+    garage: Optional[bool] = None
+    pool: Optional[bool] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    lot_size_sqft: Optional[int] = None
+    stories: Optional[int] = None
+    county: Optional[str] = None
+
+
+class AppreciationPredictionResponse(BaseModel):
+    """Response from POST /predict-appreciation."""
+    projections: List[HorizonProjection]
+    warnings: List[str]

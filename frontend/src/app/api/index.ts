@@ -116,6 +116,7 @@ export async function rankNeighborhoods(
   const { city, state } = parseCityState(cityInput);
   const features = buildFeatureWeights(rankedPriorities);
 
+  console.log('[API] rankNeighborhoods called:', { cityInput, rankedPriorities, features });
 
   const response = await fetch(`${BASE_URL}/rank-neighborhoods`, {
     method: 'POST',
@@ -202,4 +203,59 @@ export async function getListing(
   }
 
   return response.json() as Promise<GeminiListing>;
+}
+
+
+// ─── Appreciation prediction types ───────────────────────────────────────────
+
+export interface ScenarioResult {
+  appreciation_pct: number;
+  projected_value: number | null;
+}
+
+export interface HorizonProjection {
+  months: number;
+  best: ScenarioResult;
+  avg: ScenarioResult;
+  worst: ScenarioResult;
+}
+
+export interface AppreciationPredictionResponse {
+  projections: HorizonProjection[];
+  warnings: string[];
+}
+
+export interface AppreciationPredictionRequest {
+  price: number;
+  sqft: number;
+  bedrooms: number;
+  bathrooms: number;
+  yearBuilt: number;
+  propertyType: string;
+  zip: string;
+  state: string;
+  garage?: boolean;
+  pool?: boolean;
+  latitude?: number;
+  longitude?: number;
+  lot_size_sqft?: number;
+  stories?: number;
+  county?: string;
+}
+
+export async function predictAppreciation(
+  listing: AppreciationPredictionRequest
+): Promise<AppreciationPredictionResponse> {
+  const response = await fetch(`${BASE_URL}/predict-appreciation`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(listing),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => response.statusText);
+    throw new Error(`Appreciation API ${response.status}: ${text}`);
+  }
+
+  return response.json() as Promise<AppreciationPredictionResponse>;
 }

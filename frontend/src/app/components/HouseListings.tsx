@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { usePreferences } from '../context/PreferencesContext';
-import { getListing, type GeminiListing } from '../api';
+import { getListing, predictAppreciation, type GeminiListing, type AppreciationPredictionResponse } from '../api';
+import { AppreciationChart } from './AppreciationChart';
 import {
   Bed, Bath, Maximize, ArrowLeft, Loader2,
   AlertCircle, Calendar, Car, Waves, Home, Clock, DollarSign, RefreshCw, User,
@@ -27,6 +28,8 @@ export const HouseListings: React.FC = () => {
   const [listing, setListing] = useState<GeminiListing | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [appreciationData, setAppreciationData] = useState<AppreciationPredictionResponse | null>(null);
+  const [appreciationLoading, setAppreciationLoading] = useState(false);
 
 
   if (!selectedNeighborhood) {
@@ -42,6 +45,7 @@ export const HouseListings: React.FC = () => {
     setLoading(true);
     setError(null);
     setListing(null);
+    setAppreciationData(null);
 
 
     getListing(
@@ -59,7 +63,39 @@ export const HouseListings: React.FC = () => {
       houseRequirements.pool,
       houseRequirements.yearBuilt,
     )
-      .then((data) => { setListing(data); setLoading(false); })
+      .then((data) => {
+        setListing(data);
+        setLoading(false);
+
+        // Fetch appreciation predictions for this listing
+        if (data.yearBuilt && data.price && data.sqft) {
+          setAppreciationLoading(true);
+          predictAppreciation({
+            price: data.price,
+            sqft: data.sqft,
+            bedrooms: data.bedrooms,
+            bathrooms: data.bathrooms,
+            yearBuilt: data.yearBuilt,
+            propertyType: data.propertyType || 'House',
+            zip: selectedNeighborhood.id,
+            state: state,
+            garage: data.garage,
+            pool: data.pool,
+            latitude: undefined,
+            longitude: undefined,
+            lot_size_sqft: data.lotSizeSqft,
+            stories: data.stories,
+          })
+            .then((appreciationResp) => {
+              setAppreciationData(appreciationResp);
+              setAppreciationLoading(false);
+            })
+            .catch((err: Error) => {
+              console.error('Appreciation prediction failed:', err);
+              setAppreciationLoading(false);
+            });
+        }
+      })
       .catch((err: Error) => { setError(err.message); setLoading(false); });
   };
 
@@ -87,7 +123,7 @@ export const HouseListings: React.FC = () => {
     <div className="max-w-4xl mx-auto px-6 py-10">
       <button
         onClick={() => navigate('/neighborhoods')}
-        className="flex items-center gap-2 text-slate-400 hover:text-emerald-400 transition-colors text-sm font-medium mb-6"
+        className="flex items-center gap-2 text-slate-400 hover:text-[#1AAFD4] transition-colors text-sm font-medium mb-6"
       >
         <ArrowLeft className="w-4 h-4" />
         Back to Neighborhoods
@@ -96,15 +132,15 @@ export const HouseListings: React.FC = () => {
 
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-1">
-          <h1 className="text-3xl font-bold text-slate-100">Live Zillow Listing</h1>
+          <h1 className="text-3xl font-bold text-slate-100">Live Redfin Listing</h1>
           <span className="px-2.5 py-1 bg-blue-500/10 text-blue-400 text-xs font-bold rounded-full border border-blue-800/40 uppercase tracking-wide">
             Real Data
           </span>
         </div>
         <p className="text-slate-400">
           Best match found for{' '}
-          <span className="text-emerald-400 font-semibold">{selectedNeighborhood.name}</span>
-          <span className="ml-2 px-2.5 py-0.5 bg-emerald-500/10 text-emerald-400 text-sm font-semibold rounded-full border border-emerald-800/50">
+          <span className="text-[#1AAFD4] font-semibold">{selectedNeighborhood.name}</span>
+          <span className="ml-2 px-2.5 py-0.5 bg-[#1AAFD4]/10 text-[#1AAFD4] text-sm font-semibold rounded-full border border-[#1AAFD4]/30">
             {selectedNeighborhood.matchScore}% match
           </span>
         </p>
@@ -115,20 +151,20 @@ export const HouseListings: React.FC = () => {
       {loading && (
         <div className="flex flex-col items-center justify-center py-32 text-center">
           <div className="relative mb-6">
-            <div className="w-20 h-20 rounded-2xl bg-emerald-500/10 flex items-center justify-center">
-              <Loader2 className="w-10 h-10 text-emerald-400 animate-spin" />
+            <div className="w-20 h-20 rounded-2xl bg-[#1AAFD4]/10 flex items-center justify-center">
+              <Loader2 className="w-10 h-10 text-[#1AAFD4] animate-spin" />
             </div>
-            <div className="absolute -top-1 -right-1 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+            <div className="absolute -top-1 -right-1 w-6 h-6 bg-[#1AAFD4] rounded-full flex items-center justify-center">
               <span className="text-white text-xs font-bold">Z</span>
             </div>
           </div>
-          <h3 className="text-xl font-semibold text-slate-200 mb-2">Searching Zillow…</h3>
+          <h3 className="text-xl font-semibold text-slate-200 mb-2">Searching Redfin...</h3>
           <p className="text-slate-500 text-sm max-w-sm">
-            Gemini is scanning active listings in ZIP <span className="text-emerald-400 font-mono">{selectedNeighborhood.id}</span> that match your {houseRequirements.bedrooms}bd / {houseRequirements.bathrooms}ba requirements.
+            Gemini is scanning active listings in ZIP <span className="text-[#1AAFD4] font-mono">{selectedNeighborhood.id}</span> that match your {houseRequirements.bedrooms}bd / {houseRequirements.bathrooms}ba requirements.
           </p>
           <div className="mt-6 flex gap-2">
             {[0, 200, 400].map((d) => (
-              <div key={d} className="w-2 h-2 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: `${d}ms` }} />
+              <div key={d} className="w-2 h-2 rounded-full bg-[#1AAFD4] animate-bounce" style={{ animationDelay: `${d}ms` }} />
             ))}
           </div>
         </div>
@@ -175,11 +211,11 @@ export const HouseListings: React.FC = () => {
             {/* Price + address */}
             <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
               <div>
-                <div className="text-4xl font-bold text-emerald-400 mb-1">{fmt(listing.price)}</div>
+                <div className="text-4xl font-bold text-[#1AAFD4] mb-1">{fmt(listing.price)}</div>
                 <div className="text-slate-200 text-lg font-medium leading-snug">{listing.address}</div>
               </div>
               {listing.propertyType && (
-                <span className="px-3 py-1.5 bg-emerald-500/10 text-emerald-400 text-sm font-semibold rounded-full border border-emerald-800/50">
+                <span className="px-3 py-1.5 bg-[#1AAFD4]/10 text-[#1AAFD4] text-sm font-semibold rounded-full border border-[#1AAFD4]/30">
                   {listing.propertyType}
                 </span>
               )}
@@ -198,7 +234,7 @@ export const HouseListings: React.FC = () => {
               ] as { icon: React.ElementType; label: string; value: string }[]).map(({ icon: Icon, label, value }) => (
                 <div key={label} className="bg-slate-700/50 rounded-xl p-4 border border-slate-700">
                   <div className="flex items-center gap-2 mb-1">
-                    <Icon className="w-4 h-4 text-emerald-500" />
+                    <Icon className="w-4 h-4 text-[#1AAFD4]" />
                     <span className="text-slate-400 text-xs font-medium uppercase tracking-wide">{label}</span>
                   </div>
                   <div className="text-slate-100 font-bold text-lg">{value}</div>
@@ -243,6 +279,24 @@ export const HouseListings: React.FC = () => {
             )}
 
 
+            {/* Appreciation Chart */}
+            {appreciationLoading && (
+              <div className="bg-slate-700/40 border border-slate-600/50 rounded-xl p-8 mb-5 flex items-center justify-center">
+                <Loader2 className="w-6 h-6 text-[#1AAFD4] animate-spin mr-3" />
+                <span className="text-slate-400">Loading appreciation predictions...</span>
+              </div>
+            )}
+
+            {appreciationData && !appreciationLoading && (
+              <div className="mb-5">
+                <AppreciationChart
+                  projections={appreciationData.projections}
+                  currentPrice={listing.price}
+                />
+              </div>
+            )}
+
+
             {/* Agent info */}
             {(listing.agentName || listing.brokerageName) && (
               <div className="flex items-center gap-2 mb-6 text-slate-500 text-sm">
@@ -259,7 +313,7 @@ export const HouseListings: React.FC = () => {
             <div className="flex gap-3 flex-wrap">
               <button
                 onClick={handleSelect}
-                className="flex-1 py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-900 font-bold transition-colors shadow-lg shadow-emerald-500/20"
+                className="flex-1 py-3.5 rounded-xl bg-[#1AAFD4] hover:bg-[#1788B2] text-[#1a1a1a] font-bold transition-colors shadow-lg shadow-[#1AAFD4]/20"
               >
                 Select This Home →
               </button>

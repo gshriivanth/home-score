@@ -25,12 +25,25 @@ const ALL_CATEGORIES: Category[] = [
   { id: 'pct_households_children', label: 'Family Friendly',     desc: 'Households with children',            Icon: Baby },
 ];
 
+// Census ACS features (at least one must be selected)
+const ACS_FEATURES = new Set([
+  'income',
+  'commute_time',
+  'pct_bachelors',
+  'racial_diversity_index',
+  'pct_households_children',
+]);
+
 export const PriorityRanking: React.FC = () => {
   const navigate = useNavigate();
   const { city, rankedPriorities, setRankedPriorities } = usePreferences();
 
   const available = ALL_CATEGORIES.filter((c) => !rankedPriorities.includes(c.id));
   const ranked = rankedPriorities.map((id) => ALL_CATEGORIES.find((c) => c.id === id)!);
+
+  // Check if at least one ACS feature is selected
+  const hasAcsFeature = rankedPriorities.some((id) => ACS_FEATURES.has(id));
+  const canProceed = rankedPriorities.length > 0 && hasAcsFeature;
 
   const addPriority = (id: string) => setRankedPriorities([...rankedPriorities, id]);
   const removePriority = (id: string) => setRankedPriorities(rankedPriorities.filter((p) => p !== id));
@@ -54,13 +67,20 @@ export const PriorityRanking: React.FC = () => {
             {city && <span className="ml-1 text-[#1AAFD4] font-medium">Searching in {city}.</span>}
           </p>
         </div>
-        <button
-          onClick={() => navigate('/preferences')}
-          disabled={rankedPriorities.length === 0}
-          className="px-7 py-2.5 rounded-lg bg-[#1AAFD4] hover:bg-[#1788B2] disabled:bg-[#3A3A3A] disabled:text-slate-600 text-[#1a1a1a] font-semibold text-sm transition-colors whitespace-nowrap"
-        >
-          Next: Home Details →
-        </button>
+        <div className="flex flex-col items-end gap-2">
+          <button
+            onClick={() => navigate('/preferences')}
+            disabled={!canProceed}
+            className="px-7 py-2.5 rounded-lg bg-[#1AAFD4] hover:bg-[#1788B2] disabled:bg-[#3A3A3A] disabled:text-slate-600 text-[#1a1a1a] font-semibold text-sm transition-colors whitespace-nowrap"
+          >
+            Next: Home Details →
+          </button>
+          {rankedPriorities.length > 0 && !hasAcsFeature && (
+            <p className="text-xs text-amber-400">
+              Select at least one Census feature: Wealth, Commute, Education, Diversity, or Family Friendly
+            </p>
+          )}
+        </div>
       </div>
 
       <div className="grid lg:grid-cols-5 gap-6">

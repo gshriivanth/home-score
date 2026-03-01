@@ -46,23 +46,29 @@ from fbi import fetch_crime_data
 from geo import lookup_zip_centroids, lookup_zips_for_city
 from listings import generate_listings
 from models import (
+    AppreciationPredictionRequest,
+    AppreciationPredictionResponse,
     FeatureBreakdown,
+    HorizonProjection,
     NeighborhoodLocation,
     NeighborhoodResult,
     RankNeighborhoodsResponse,
     RankZipsRequest,
     RankZipsResponse,
     RankedZip,
+    ScenarioResult,
 )
 from schools import SUPPORTED_FEATURES as _SCHOOL_FEATURES
 from schools import fetch_school_data
 from scoring import rank_zips
+from appreciation import fetch_fred_macros, load_model_artifacts, predict_scenarios
 
 
 CENSUS_API_KEY: str = os.getenv("CENSUS_API_KEY", "")
 FBI_API_KEY: str = os.getenv("FBI_API_KEY", "")
 GREATSCHOOLS_API_KEY: str = os.getenv("GREATSCHOOLS_API_KEY", "")
 GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+FRED_API_KEY: str = os.getenv("FRED_API_KEY", "")
 
 # Combined set of all features supported across all three data sources
 ALL_SUPPORTED_FEATURES = _ACS_FEATURES | _CRIME_FEATURES | _SCHOOL_FEATURES
@@ -89,6 +95,23 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ---------------------------------------------------------------------------
+# Startup: Load appreciation model
+# ---------------------------------------------------------------------------
+
+@app.on_event("startup")
+async def startup_event():
+    """Load ML model artifacts at server startup."""
+    try:
+        model, meta = load_model_artifacts()
+        app.state.appreciation_model = model
+        app.state.appreciation_meta = meta
+        print("[STARTUP] Loaded appreciation model successfully")
+    except Exception as e:
+        print(f"[STARTUP] Warning: Could not load appreciation model: {e}")
+        app.state.appreciation_model = None
+        app.state.appreciation_meta = None
 
 # ---------------------------------------------------------------------------
 # Shared pipeline logic
@@ -147,7 +170,26 @@ async def _run_pipeline(req: RankZipsRequest) -> tuple[list, list[str]]:
     # Only pass ACS feature names to the Census client
     acs_feature_names = [f.name for f in req.features if f.name in _ACS_FEATURES]
 
-    # --- Stage 1: Census ACS (hard fail) ------------------------------------
+    # Validate that at least one ACS feature is selected
+    if not acs_feature_names:
+        acs_feature_list = ", ".join(sorted(_ACS_FEATURES))
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"At least one Census ACS feature is required for neighborhood ranking. "
+                f"Available ACS features: {acs_feature_list}. "
+                f"Please select at least one of: Neighborhood Wealth (income), "
+                f"Commute (commute_time), Education Level (pct_bachelors), "
+                f"Diversity (racial_diversity_index), or Family Friendly (pct_households_children)."
+            )
+        )
+
+    # Debug logging
+    print(f"[DEBUG] City: {req.city}, State: {req.state}")
+    print(f"[DEBUG] ZIP list ({len(zip_list)} ZIPs): {zip_list[:10]}...")
+    print(f"[DEBUG] ACS feature names: {acs_feature_names}")
+
+    # --- Stage 1: Census ACS (required - at least one ACS feature must be selected) ---
     try:
         acs_data = await fetch_acs_data(
             zctas=zip_list,
@@ -156,10 +198,13 @@ async def _run_pipeline(req: RankZipsRequest) -> tuple[list, list[str]]:
             year=req.acs_year,
             api_key=CENSUS_API_KEY,
         )
+        print(f"[DEBUG] ACS data returned: {len(acs_data)} ZCTAs")
     except Exception as exc:
+        print(f"[DEBUG] Census API exception: {exc}")
         raise HTTPException(status_code=502, detail=f"Census API error: {exc}")
 
     if not acs_data:
+        print(f"[DEBUG] NO ACS DATA - zip_list had {len(zip_list)} ZIPs")
         raise HTTPException(
             status_code=404,
             detail=(
@@ -168,6 +213,9 @@ async def _run_pipeline(req: RankZipsRequest) -> tuple[list, list[str]]:
             ),
         )
 
+    # Use ZCTAs that ACS returned as the authoritative ZIP list
+    scored_zctas = list(acs_data.keys())
+
     # Warn about ZCTAs missing individual ACS features
     for zcta, feats in acs_data.items():
         missing = [fn for fn, val in feats.items() if val is None]
@@ -175,9 +223,6 @@ async def _run_pipeline(req: RankZipsRequest) -> tuple[list, list[str]]:
             warnings.append(
                 f"ZIP {zcta}: no Census data for {missing} — imputed with city mean (z=0)."
             )
-
-    # Use the ZCTAs that ACS returned as the authoritative ZIP list
-    scored_zctas = list(acs_data.keys())
 
     # --- Stage 2: FBI CDE + GreatSchools (soft fail, run concurrently) ------
     crime_result, school_result = await asyncio.gather(
@@ -211,17 +256,16 @@ async def _run_pipeline(req: RankZipsRequest) -> tuple[list, list[str]]:
     # The Census API always returns all ZCTAs nationally (raw_rows are cached),
     # so passing zctas=[] just skips the client-side filter — no extra network call.
     national_acs_data: Dict = {}
-    if acs_feature_names:
-        try:
-            national_acs_data = await fetch_acs_data(
-                zctas=[],
-                feature_names=acs_feature_names,
-                state_fips=state_fips,
-                year=req.acs_year,
-                api_key=CENSUS_API_KEY,
-            )
-        except Exception:
-            warnings.append("Could not load national ACS reference — z-scores normalised within city only.")
+    try:
+        national_acs_data = await fetch_acs_data(
+            zctas=[],
+            feature_names=acs_feature_names,
+            state_fips=state_fips,
+            year=req.acs_year,
+            api_key=CENSUS_API_KEY,
+        )
+    except Exception:
+        warnings.append("Could not load national ACS reference — z-scores normalised within city only.")
 
     # --- Stage 3: Score -----------------------------------------------------
     feature_configs = [
@@ -452,6 +496,89 @@ async def get_listing(req: ListingRequest) -> Dict:
         raise HTTPException(status_code=503, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Listings error: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# POST /predict-appreciation
+# ---------------------------------------------------------------------------
+
+@app.post("/predict-appreciation", response_model=AppreciationPredictionResponse, tags=["predictions"])
+async def predict_appreciation(req: AppreciationPredictionRequest) -> AppreciationPredictionResponse:
+    """
+    Predict house appreciation for 6, 12, and 36 months under best/avg/worst scenarios.
+
+    Uses XGBoost model trained on historical house sales data and FRED macroeconomic indicators.
+    Returns percentage appreciation and projected values for each scenario/horizon combination.
+    """
+    warnings: List[str] = []
+
+    # Check if model loaded successfully
+    if app.state.appreciation_model is None or app.state.appreciation_meta is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Appreciation model not loaded. Check server startup logs."
+        )
+
+    # Fetch live FRED macro data (or fall back to training medians)
+    if not FRED_API_KEY:
+        warnings.append("FRED_API_KEY not set — using training median macro values.")
+        macros = {}
+    else:
+        try:
+            macros = await fetch_fred_macros(FRED_API_KEY)
+        except Exception as e:
+            warnings.append(f"FRED API error: {e} — using training median macro values.")
+            macros = {}
+
+    # Build listing dict from request
+    listing = {
+        "price": req.price,
+        "sqft": req.sqft,
+        "bedrooms": req.bedrooms,
+        "bathrooms": req.bathrooms,
+        "yearBuilt": req.yearBuilt,
+        "propertyType": req.propertyType,
+        "zip": req.zip,
+        "state": req.state,
+        "garage": req.garage,
+        "pool": req.pool,
+        "latitude": req.latitude,
+        "longitude": req.longitude,
+        "lot_size_sqft": req.lot_size_sqft,
+        "stories": req.stories,
+        "county": req.county,
+    }
+
+    # Run predictions
+    try:
+        raw_results = predict_scenarios(
+            listing=listing,
+            macros=macros,
+            model=app.state.appreciation_model,
+            meta=app.state.appreciation_meta,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Prediction error: {e}"
+        )
+
+    # Convert to Pydantic models
+    projections: List[HorizonProjection] = []
+    for r in raw_results:
+        projections.append(
+            HorizonProjection(
+                months=r["months"],
+                best=ScenarioResult(**r["best"]),
+                avg=ScenarioResult(**r["avg"]),
+                worst=ScenarioResult(**r["worst"]),
+            )
+        )
+
+    return AppreciationPredictionResponse(
+        projections=projections,
+        warnings=warnings,
+    )
 
 
 # ---------------------------------------------------------------------------

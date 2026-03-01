@@ -1,0 +1,100 @@
+{
+  "num_cols": [
+    "horizon_months",
+    "baseline_sale_price",
+    "living_area_sqft",
+    "lot_size_sqft",
+    "bedrooms",
+    "bathrooms",
+    "year_built",
+    "stories",
+    "pool_flag",
+    "latitude",
+    "longitude",
+    "mortgage_rate",
+    "fed_funds",
+    "unemployment",
+    "CPI"
+  ],
+  "cat_cols": [
+    "property_type",
+    "zip",
+    "county",
+    "state",
+    "garage_spaces"
+  ],
+  "feature_names": [
+    "horizon_months",
+    "baseline_sale_price",
+    "living_area_sqft",
+    "lot_size_sqft",
+    "bedrooms",
+    "bathrooms",
+    "year_built",
+    "stories",
+    "pool_flag",
+    "latitude",
+    "longitude",
+    "mortgage_rate",
+    "fed_funds",
+    "unemployment",
+    "CPI",
+    "property_type_CONDOMINIUM",
+    "property_type_SFR",
+    "zip_10001",
+    "zip_60601",
+    "zip_90210",
+    "county_Cook",
+    "county_Los Angeles",
+    "county_New York",
+    "state_CA",
+    "state_IL",
+    "state_NY",
+    "garage_spaces_Garage, Attached",
+    "garage_spaces_No Garage",
+    "garage_spaces_nan"
+  ],
+  "num_imputer_medians": [
+    12.0,
+    3542.5,
+    2064.0,
+    16333.0,
+    4.0,
+    4.0,
+    1992.0,
+    13.0,
+    0.0,
+    40.7483505,
+    -87.616011,
+    5.45,
+    0.97,
+    5.7,
+    213.448
+  ],
+  "ohe_categories": {
+    "property_type": [
+      "CONDOMINIUM",
+      "SFR"
+    ],
+    "zip": [
+      "10001",
+      "60601",
+      "90210"
+    ],
+    "county": [
+      "Cook",
+      "Los Angeles",
+      "New York"
+    ],
+    "state": [
+      "CA",
+      "IL",
+      "NY"
+    ],
+    "garage_spaces": [
+      "Garage, Attached",
+      "No Garage",
+      "nan"
+    ]
+  }
+}
