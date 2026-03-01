@@ -22,32 +22,29 @@ export const HouseListings: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-10">
-      {/* Back + header */}
       <button
         onClick={() => navigate('/neighborhoods')}
-        className="flex items-center gap-2 text-gray-500 hover:text-green-700 transition-colors text-sm font-medium mb-6"
+        className="flex items-center gap-2 text-slate-400 hover:text-emerald-400 transition-colors text-sm font-medium mb-6"
       >
         <ArrowLeft className="w-4 h-4" />
         Back to Neighborhoods
       </button>
 
-      <div className="mb-8 flex items-end gap-4 flex-wrap">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-1">Available Homes</h1>
-          <p className="text-gray-500">
-            <span className="text-green-600 font-semibold">{listings.length} listings</span> in {selectedNeighborhood.name}
-            <span className="ml-2 px-2.5 py-0.5 bg-green-50 text-green-700 text-sm font-semibold rounded-full border border-green-100">
-              {selectedNeighborhood.matchScore}% match
-            </span>
-          </p>
-        </div>
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-slate-100 mb-1">Available Homes</h1>
+        <p className="text-slate-400">
+          <span className="text-emerald-400 font-semibold">{listings.length} listings</span> in {selectedNeighborhood.name}
+          <span className="ml-2 px-2.5 py-0.5 bg-emerald-500/10 text-emerald-400 text-sm font-semibold rounded-full border border-emerald-800/50">
+            {selectedNeighborhood.matchScore}% match
+          </span>
+        </p>
       </div>
 
       {listings.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 text-center">
           <div className="text-5xl mb-4">🏠</div>
-          <h3 className="text-xl font-semibold text-gray-700 mb-2">No listings yet</h3>
-          <p className="text-gray-400">Listings for this neighborhood will appear here once connected to live data.</p>
+          <h3 className="text-xl font-semibold text-slate-300 mb-2">No listings yet</h3>
+          <p className="text-slate-500">Listings for this neighborhood will appear here once connected to live data.</p>
         </div>
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -55,10 +52,9 @@ export const HouseListings: React.FC = () => {
             <button
               key={listing.id}
               onClick={() => handleSelect(listing)}
-              className="bg-white rounded-2xl overflow-hidden border border-gray-200 shadow-sm hover:border-green-400 hover:shadow-md transition-all text-left group"
+              className="bg-slate-800 rounded-2xl overflow-hidden border border-slate-700 hover:border-emerald-500 hover:shadow-lg hover:shadow-emerald-500/10 transition-all text-left group"
             >
-              {/* Image */}
-              <div className="aspect-[4/3] overflow-hidden bg-gray-100">
+              <div className="aspect-[4/3] overflow-hidden bg-slate-700">
                 <img
                   src={listing.imageUrl}
                   alt={listing.address}
@@ -66,30 +62,24 @@ export const HouseListings: React.FC = () => {
                 />
               </div>
 
-              {/* Content */}
               <div className="p-5">
-                {/* Price */}
-                <div className="text-2xl font-bold text-green-600 mb-1">
+                <div className="text-2xl font-bold text-emerald-400 mb-1">
                   ${listing.price >= 1000000
                     ? `${(listing.price / 1000000).toFixed(2)}M`
                     : `${(listing.price / 1000).toFixed(0)}K`}
                 </div>
-
-                {/* Address */}
-                <div className="text-gray-800 font-medium mb-4 leading-snug">{listing.address}</div>
-
-                {/* Stats */}
-                <div className="flex gap-4 text-gray-500 text-sm border-t border-gray-100 pt-3">
+                <div className="text-slate-200 font-medium mb-4 leading-snug">{listing.address}</div>
+                <div className="flex gap-4 text-slate-400 text-sm border-t border-slate-700 pt-3">
                   <div className="flex items-center gap-1.5">
-                    <Bed className="w-4 h-4 text-gray-400" />
+                    <Bed className="w-4 h-4 text-slate-500" />
                     <span>{listing.bedrooms} bed</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <Bath className="w-4 h-4 text-gray-400" />
+                    <Bath className="w-4 h-4 text-slate-500" />
                     <span>{listing.bathrooms} bath</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <Maximize className="w-4 h-4 text-gray-400" />
+                    <Maximize className="w-4 h-4 text-slate-500" />
                     <span>{listing.sqft.toLocaleString()} sqft</span>
                   </div>
                 </div>
