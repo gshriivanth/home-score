@@ -32,14 +32,20 @@ def _mean_std(values: List[float]) -> Tuple[float, float]:
 def rank_zips(
     data: Dict[str, Dict[str, Optional[float]]],
     features: List[Dict],
+    reference_data: Optional[Dict[str, Dict[str, Optional[float]]]] = None,
 ) -> Tuple[List[Dict], List[str]]:
     """
     Compute per-feature z-scores and weighted totals for every ZCTA.
 
     Parameters
     ----------
-    data     : {zcta: {feature_name: raw_value_or_None}}
-    features : [{"name": str, "weight": float, "higher_is_better": bool}, ...]
+    data           : {zcta: {feature_name: raw_value_or_None}}  — ZCTAs to score
+    features       : [{"name": str, "weight": float, "higher_is_better": bool}, ...]
+    reference_data : optional larger population (e.g. all national ZCTAs) used
+                     to compute mean/std for z-score normalisation.  When a
+                     feature is present in reference_data, national stats are
+                     used so scores are comparable across cities.  Features not
+                     present in reference_data fall back to local (data) stats.
 
     Returns
     -------
@@ -69,20 +75,25 @@ def rank_zips(
 
     # ------------------------------------------------------------------
     # Step 1 & 2: Compute per-feature mean/std and z-scores
+    # Use reference_data (national) when available, else fall back to local.
     # ------------------------------------------------------------------
     feature_stats: Dict[str, Tuple[float, float]] = {}
     for feat in features:
         fname = feat["name"]
-        raw_vals = [
-            data[z][fname]
-            for z in zctas
-            if data[z].get(fname) is not None
-        ]
-        if len(raw_vals) < 2:
+
+        # Prefer national reference for ACS features
+        if reference_data and any(fname in reference_data[z] for z in reference_data):
+            pop = [reference_data[z][fname] for z in reference_data if reference_data[z].get(fname) is not None]
+            source = "national"
+        else:
+            pop = [data[z][fname] for z in zctas if data[z].get(fname) is not None]
+            source = "local"
+
+        if len(pop) < 2:
             warnings.append(
-                f"Feature '{fname}': fewer than 2 ZCTAs have data — z-scores set to 0."
+                f"Feature '{fname}': fewer than 2 ZCTAs have {source} data — z-scores set to 0."
             )
-        feature_stats[fname] = _mean_std(raw_vals) if raw_vals else (0.0, 0.0)
+        feature_stats[fname] = _mean_std(pop) if pop else (0.0, 0.0)
 
     # ------------------------------------------------------------------
     # Step 3 & 4: Build per-ZCTA score dict

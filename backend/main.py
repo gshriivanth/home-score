@@ -202,12 +202,28 @@ async def _run_pipeline(req: RankZipsRequest) -> tuple[list, list[str]]:
         acs_data[zcta].update(crime_data.get(zcta, {}))
         acs_data[zcta].update(school_data.get(zcta, {}))
 
+    # --- Fetch national ACS data for z-score normalisation ------------------
+    # The Census API always returns all ZCTAs nationally (raw_rows are cached),
+    # so passing zctas=[] just skips the client-side filter — no extra network call.
+    national_acs_data: Dict = {}
+    if acs_feature_names:
+        try:
+            national_acs_data = await fetch_acs_data(
+                zctas=[],
+                feature_names=acs_feature_names,
+                state_fips=state_fips,
+                year=req.acs_year,
+                api_key=CENSUS_API_KEY,
+            )
+        except Exception:
+            warnings.append("Could not load national ACS reference — z-scores normalised within city only.")
+
     # --- Stage 3: Score -----------------------------------------------------
     feature_configs = [
         {"name": f.name, "weight": f.weight, "higher_is_better": f.higher_is_better}
         for f in req.features
     ]
-    ranked, score_warnings = rank_zips(acs_data, feature_configs)
+    ranked, score_warnings = rank_zips(acs_data, feature_configs, reference_data=national_acs_data or None)
     warnings.extend(score_warnings)
 
     return ranked, warnings
@@ -279,14 +295,14 @@ def _score_tags(score: float, all_scores: List[float], features: Dict) -> List[s
 
     # Per-feature highlights (positive contribution = feature is good here)
     label_map = {
-        "income": "High income",
-        "median_rent": "Affordable rent",
-        "median_home_value": "Affordable homes",
-        "commute_time": "Short commute",
-        "pct_bachelors": "Highly educated",
-        "violent_crime_rate": "Low violent crime",
-        "property_crime_rate": "Low property crime",
-        "avg_school_rating": "Top-rated schools",
+        "income":                  "High income",
+        "commute_time":            "Short commute",
+        "pct_bachelors":           "Highly educated",
+        "violent_crime_rate":      "Low violent crime",
+        "property_crime_rate":     "Low property crime",
+        "avg_school_rating":       "Top-rated schools",
+        "racial_diversity_index":  "Diverse community",
+        "pct_households_children": "Family-friendly",
     }
     sorted_features = sorted(
         features.items(), key=lambda kv: kv[1].get("contribution", 0), reverse=True
@@ -300,15 +316,18 @@ def _score_tags(score: float, all_scores: List[float], features: Dict) -> List[s
 
 
 def _score_to_match(score: float, all_scores: List[float]) -> float:
-    """Map raw weighted z-score to a 0-100 matchScore for the frontend."""
-    if not all_scores:
-        return 50.0
-    min_s, max_s = min(all_scores), max(all_scores)
-    if max_s == min_s:
-        return 75.0
-    # Linear rescale to [40, 98]
-    normalised = (score - min_s) / (max_s - min_s)
-    return round(40.0 + normalised * 58.0, 1)
+    """
+    Map raw weighted z-score to a 0–100 matchScore using a sigmoid.
+
+    Because z-scores are now normalised against the national ZCTA distribution,
+    the output is comparable across cities:
+      score =  0  →  50%  (national average across selected features)
+      score =  1  →  73%  (~1 std above national average)
+      score =  2  →  88%  (~2 std above national average)
+      score = -1  →  27%  (~1 std below national average)
+    """
+    import math
+    return round(100.0 / (1.0 + math.exp(-score)), 1)
 
 
 @app.post("/rank-neighborhoods", response_model=RankNeighborhoodsResponse, tags=["ranking"])
