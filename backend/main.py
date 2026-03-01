@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from typing import Dict, List
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
@@ -578,6 +578,256 @@ async def predict_appreciation(req: AppreciationPredictionRequest) -> Appreciati
         projections=projections,
         warnings=warnings,
     )
+
+
+# ---------------------------------------------------------------------------
+# POST /generate-summary  (Gemini AI pipeline explanation)
+# ---------------------------------------------------------------------------
+
+_PRIORITY_LABELS: Dict[str, str] = {
+    "violent_crime_rate":      "Safety (low violent crime)",
+    "property_crime_rate":     "Safety (low property crime)",
+    "avg_school_rating":       "School quality",
+    "income":                  "Neighborhood wealth / median income",
+    "commute_time":            "Short commute",
+    "pct_bachelors":           "Education level (% with bachelor's degree)",
+    "racial_diversity_index":  "Diversity",
+    "pct_households_children": "Family-friendly environment",
+}
+
+_FEATURE_LABELS: Dict[str, str] = {
+    "income":                  "Median Household Income",
+    "commute_time":            "Average Commute Time (minutes)",
+    "pct_bachelors":           "% of Residents with Bachelor's Degree",
+    "racial_diversity_index":  "Racial Diversity Index (0=homogeneous, 1=fully diverse)",
+    "pct_households_children": "% of Households with Children under 18",
+    "violent_crime_rate":      "Violent Crime Rate (per 100,000 residents)",
+    "property_crime_rate":     "Property Crime Rate (per 100,000 residents)",
+    "avg_school_rating":       "Average School Rating (1–10 scale)",
+}
+
+_SUMMARY_SYSTEM_PROMPT = """
+You are HomeScore AI. Write exactly 3 plain-prose paragraphs (no headers, bullets, or markdown) summarizing why this home and neighborhood were recommended. Use only numbers from the data provided — never invent figures. Write in second person. Skip any section whose data is absent. Separate paragraphs with a blank line. Target 220–280 words total.
+
+Paragraph 1: Neighborhood match. Name the user's top 1–2 priorities and cite the actual raw values and z-scores that drove the match score.
+Paragraph 2: Home fit and monthly costs. Show how the listing specs meet the stated requirements, note standout features, then summarize the total monthly commitment.
+Paragraph 3: Appreciation outlook (only if projections are provided). State the average-case prediction in dollars and percent, contrast briefly with best and worst cases.
+""".strip()
+
+
+class SummaryRequest(BaseModel):
+    # User preferences
+    city: str
+    state: str
+    ranked_priorities: List[str]
+    house_requirements: Dict[str, Any]
+
+    # Neighborhood
+    neighborhood_name: str
+    neighborhood_match_score: float
+    neighborhood_zip: str
+    neighborhood_tags: List[str]
+    neighborhood_features: Optional[Dict[str, Any]] = None
+
+    # Listing
+    listing_address: str
+    listing_price: int
+    listing_bedrooms: int
+    listing_bathrooms: float
+    listing_sqft: int
+    listing_year_built: Optional[int] = None
+    listing_property_type: Optional[str] = None
+    listing_garage: Optional[bool] = None
+    listing_pool: Optional[bool] = None
+    listing_stories: Optional[int] = None
+    listing_lot_size_sqft: Optional[int] = None
+    listing_hoa_monthly: Optional[float] = None
+    listing_days_on_market: Optional[int] = None
+    listing_price_per_sqft: Optional[float] = None
+    listing_description: Optional[str] = None
+
+    # Appreciation predictions
+    appreciation_projections: Optional[List[Dict[str, Any]]] = None
+
+    # Monthly cost breakdown (frontend-calculated)
+    monthly_mortgage: Optional[float] = None
+    monthly_property_tax: Optional[float] = None
+    monthly_insurance: Optional[float] = None
+    monthly_hoa: Optional[float] = None
+    monthly_maintenance: Optional[float] = None
+
+
+def _build_data_block(req: SummaryRequest) -> str:
+    """Format all pipeline data into a structured text block for Gemini."""
+    lines: List[str] = []
+
+    lines.append("=== USER PREFERENCES ===")
+    lines.append(f"City: {req.city}, {req.state}")
+    if req.ranked_priorities:
+        lines.append("Ranked Priorities (most → least important):")
+        for i, p in enumerate(req.ranked_priorities, 1):
+            lines.append(f"  {i}. {_PRIORITY_LABELS.get(p, p)}")
+
+    hr = req.house_requirements
+    lines.append("House Requirements:")
+    lines.append(f"  Bedrooms: {hr.get('bedrooms', 'any')}")
+    lines.append(f"  Bathrooms: {hr.get('bathrooms', 'any')}")
+    lines.append(f"  Price range: ${int(hr.get('minPrice', 0)):,} – ${int(hr.get('maxPrice', 0)):,}")
+    lines.append(f"  Size: {int(hr.get('sqftMin', 0)):,} – {int(hr.get('sqftMax', 0)):,} sqft")
+    if hr.get('propertyType') and hr.get('propertyType') != 'any':
+        lines.append(f"  Property type: {hr['propertyType']}")
+    if hr.get('garage'):
+        lines.append("  Garage: required")
+    if hr.get('pool'):
+        lines.append("  Pool: required")
+    if hr.get('yearBuilt') and hr.get('yearBuilt') != 'any':
+        lines.append(f"  Year built preference: {hr['yearBuilt']}")
+
+    lines.append("")
+    lines.append(f"=== NEIGHBORHOOD ANALYSIS: {req.neighborhood_name} ===")
+    lines.append(f"ZIP Code: {req.neighborhood_zip}")
+    lines.append(f"Match Score: {req.neighborhood_match_score:.1f} / 100")
+    lines.append(f"Highlights: {', '.join(req.neighborhood_tags)}")
+
+    if req.neighborhood_features:
+        lines.append("")
+        lines.append("Scoring Methodology: Z-score normalization against national ZCTA distribution.")
+        lines.append("  score=0 → national average; score=+1 → top 27% nationally; score=–1 → bottom 27%.")
+        lines.append("  Weighted sum of directional z-scores → sigmoid → 0–100 match score.")
+        lines.append("")
+        lines.append("Feature Breakdown:")
+        for fname, bd in req.neighborhood_features.items():
+            label = _FEATURE_LABELS.get(fname, fname)
+            raw = bd.get('raw_value')
+            z = bd.get('z_score')
+            w = bd.get('weight', 0)
+            contrib = bd.get('contribution')
+            parts = [f"  {label}:"]
+            if raw is not None:
+                if fname == 'income':
+                    parts.append(f"raw value = ${raw:,.0f}")
+                elif fname == 'commute_time':
+                    parts.append(f"raw value = {raw:.1f} min")
+                elif fname in ('pct_bachelors', 'pct_households_children', 'racial_diversity_index'):
+                    parts.append(f"raw value = {raw * 100:.1f}%")
+                else:
+                    parts.append(f"raw value = {raw:.2f}")
+            if z is not None:
+                lines_suffix = "above" if z >= 0 else "below"
+                lines.append(
+                    " | ".join(parts)
+                    + f" | z-score = {z:+.2f} ({abs(z):.2f}σ {lines_suffix} national avg)"
+                    + f" | weight = {w * 100:.0f}%"
+                    + (f" | contribution = {contrib:+.3f}" if contrib is not None else "")
+                )
+                parts = []  # already appended
+            else:
+                lines.append(" | ".join(parts) + f" | weight = {w * 100:.0f}%")
+                parts = []
+
+    lines.append("")
+    lines.append("=== SELECTED LISTING ===")
+    lines.append(f"Address: {req.listing_address}")
+    lines.append(f"Asking Price: ${req.listing_price:,}")
+    lines.append(f"Bedrooms: {req.listing_bedrooms}  |  Bathrooms: {req.listing_bathrooms}")
+    lines.append(f"Interior: {req.listing_sqft:,} sqft")
+    if req.listing_year_built:
+        lines.append(f"Year Built: {req.listing_year_built}")
+    if req.listing_property_type:
+        lines.append(f"Property Type: {req.listing_property_type}")
+    if req.listing_lot_size_sqft:
+        lines.append(f"Lot Size: {req.listing_lot_size_sqft:,} sqft")
+    if req.listing_price_per_sqft:
+        lines.append(f"Price per sqft: ${req.listing_price_per_sqft:.0f}")
+    feats = [f for f, flag in [("garage", req.listing_garage), ("pool", req.listing_pool)] if flag]
+    if feats:
+        lines.append(f"Features: {', '.join(feats)}")
+    if req.listing_hoa_monthly:
+        lines.append(f"HOA: ${req.listing_hoa_monthly:.0f}/month")
+    if req.listing_days_on_market is not None:
+        lines.append(f"Days on Market: {req.listing_days_on_market}")
+    if req.listing_description:
+        lines.append(f"Listing Description: {req.listing_description}")
+
+    if req.appreciation_projections:
+        lines.append("")
+        lines.append("=== APPRECIATION PREDICTIONS (XGBoost ML Model + FRED Macro Data) ===")
+        lines.append("Model: XGBoost regression trained on historical US home sales transactions.")
+        lines.append("Macro inputs (live from Federal Reserve / FRED): 30-year mortgage rate, fed funds rate, unemployment rate, CPI.")
+        lines.append("Best scenario: mortgage –1.5%, fed funds –1.0%, unemployment –1.5% vs. current.")
+        lines.append("Worst scenario: mortgage +2.0%, fed funds +1.5%, unemployment +2.0% vs. current.")
+        lines.append("")
+        for proj in req.appreciation_projections:
+            months = proj.get('months')
+            best = proj.get('best', {})
+            avg = proj.get('avg', {})
+            worst = proj.get('worst', {})
+            lines.append(f"  {months}-Month Horizon:")
+            for label, scenario in [("Best case", best), ("Average case", avg), ("Worst case", worst)]:
+                pct = scenario.get('appreciation_pct', 0)
+                val = scenario.get('projected_value')
+                val_str = f"  →  projected value ${val:,}" if val else ""
+                sign = "+" if pct >= 0 else ""
+                lines.append(f"    {label}: {sign}{pct:.1f}%{val_str}")
+
+    if any(x is not None for x in [req.monthly_mortgage, req.monthly_property_tax,
+                                     req.monthly_insurance, req.monthly_hoa, req.monthly_maintenance]):
+        lines.append("")
+        lines.append("=== MONTHLY COST BREAKDOWN ===")
+        lines.append("Assumptions: 20% down payment, 7% interest rate, 30-year fixed mortgage.")
+        down = int(req.listing_price * 0.20)
+        lines.append(f"Down payment required: ${down:,} (20% of ${req.listing_price:,})")
+        cost_rows = [
+            ("Mortgage (P&I)", req.monthly_mortgage),
+            ("Property Tax", req.monthly_property_tax),
+            ("Homeowner Insurance", req.monthly_insurance),
+            ("HOA Fees", req.monthly_hoa),
+            ("Maintenance Reserve", req.monthly_maintenance),
+        ]
+        total = 0.0
+        for name, val in cost_rows:
+            if val is not None:
+                lines.append(f"  {name}: ${val:,.0f}/month")
+                total += val
+        if total:
+            lines.append(f"  TOTAL monthly commitment: ${total:,.0f}/month")
+
+    return "\n".join(lines)
+
+
+@app.post("/generate-summary", tags=["summary"])
+async def generate_summary(req: SummaryRequest) -> Dict:
+    """
+    Call Gemini to produce a personalized, plain-prose summary explaining
+    why this neighborhood and listing were recommended based on all pipeline
+    scores, predictions, and the user's stated preferences.
+    """
+    gemini_key = os.getenv("GEMINI_API_KEY", "")
+    if not gemini_key:
+        raise HTTPException(
+            status_code=503,
+            detail="GEMINI_API_KEY not configured on the server.",
+        )
+
+    data_block = _build_data_block(req)
+
+    try:
+        from google import genai
+        from google.genai import types as genai_types
+
+        client = genai.Client(api_key=gemini_key)
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            config=genai_types.GenerateContentConfig(
+                system_instruction=_SUMMARY_SYSTEM_PROMPT,
+                temperature=0.55
+            ),
+            contents=data_block,
+        )
+        summary_text = response.text or ""
+        return {"summary": summary_text.strip()}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Gemini API error: {exc}")
 
 
 # ---------------------------------------------------------------------------

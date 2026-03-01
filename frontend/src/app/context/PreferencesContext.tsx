@@ -16,12 +16,27 @@ export interface HouseRequirements {
   stories: number;
 }
 
+export interface NeighborhoodFeature {
+  raw_value: number | null;
+  z_score: number | null;
+  weight: number;
+  contribution: number | null;
+}
+
 export interface Neighborhood {
   id: string;
   name: string;
   matchScore: number;
   tags: string[];
   location: { lat: number; lng: number };
+  features?: Record<string, NeighborhoodFeature>;
+}
+
+export interface AppreciationProjection {
+  months: number;
+  best: { appreciation_pct: number; projected_value: number | null };
+  avg: { appreciation_pct: number; projected_value: number | null };
+  worst: { appreciation_pct: number; projected_value: number | null };
 }
 
 export interface Listing {
@@ -33,6 +48,17 @@ export interface Listing {
   bathrooms: number;
   sqft: number;
   imageUrl: string;
+  // Extended fields from GeminiListing
+  yearBuilt?: number;
+  propertyType?: string;
+  garage?: boolean;
+  pool?: boolean;
+  stories?: number;
+  lotSizeSqft?: number;
+  hoaMonthly?: number;
+  daysOnMarket?: number;
+  pricePerSqft?: number;
+  description?: string;
 }
 
 interface PreferencesContextType {
@@ -46,6 +72,8 @@ interface PreferencesContextType {
   setSelectedNeighborhood: (neighborhood: Neighborhood | null) => void;
   selectedListing: Listing | null;
   setSelectedListing: (listing: Listing | null) => void;
+  appreciationData: AppreciationProjection[] | null;
+  setAppreciationData: (data: AppreciationProjection[] | null) => void;
 }
 
 const PreferencesContext = createContext<PreferencesContextType | undefined>(undefined);
@@ -71,6 +99,7 @@ export const PreferencesProvider: React.FC<{ children: ReactNode }> = ({ childre
 
   const [selectedNeighborhood, setSelectedNeighborhood] = useState<Neighborhood | null>(null);
   const [selectedListing, setSelectedListing] = useState<Listing | null>(null);
+  const [appreciationData, setAppreciationData] = useState<AppreciationProjection[] | null>(null);
 
   return (
     <PreferencesContext.Provider
@@ -85,6 +114,8 @@ export const PreferencesProvider: React.FC<{ children: ReactNode }> = ({ childre
         setSelectedNeighborhood,
         selectedListing,
         setSelectedListing,
+        appreciationData,
+        setAppreciationData,
       }}
     >
       {children}

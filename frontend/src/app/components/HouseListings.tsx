@@ -22,15 +22,19 @@ const fmt = (n: number) =>
 
 export const HouseListings: React.FC = () => {
   const navigate = useNavigate();
-  const { selectedNeighborhood, setSelectedListing, houseRequirements, city } = usePreferences();
+  const {
+    selectedNeighborhood,
+    setSelectedListing,
+    setAppreciationData,
+    houseRequirements,
+    city,
+  } = usePreferences();
 
   const [listings, setListings] = useState<GeminiListing[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // Detail view state
   const [selectedDetail, setSelectedDetail] = useState<GeminiListing | null>(null);
-  const [appreciationData, setAppreciationData] = useState<AppreciationPredictionResponse | null>(null);
+  const [localAppreciationData, setLocalAppreciationData] = useState<AppreciationPredictionResponse | null>(null);
   const [appreciationLoading, setAppreciationLoading] = useState(false);
 
 
@@ -49,6 +53,8 @@ export const HouseListings: React.FC = () => {
     setListings([]);
     setSelectedDetail(null);
     setAppreciationData(null);
+    setLocalAppreciationData(null);
+    setAppreciationLoading(false);
 
     getListings(
       selectedNeighborhood.id,
@@ -99,8 +105,16 @@ export const HouseListings: React.FC = () => {
         lot_size_sqft: listing.lotSizeSqft,
         stories: listing.stories,
       })
-        .then((resp) => { setAppreciationData(resp); setAppreciationLoading(false); })
-        .catch((err: Error) => { console.error('Appreciation prediction failed:', err); setAppreciationLoading(false); });
+        .then((resp) => {
+          setLocalAppreciationData(resp);
+          setAppreciationData(resp.projections);
+          setAppreciationLoading(false);
+        })
+        .catch((err: Error) => {
+          console.error('Appreciation prediction failed:', err);
+          setLocalAppreciationData(null);
+          setAppreciationLoading(false);
+        });
     }
   };
 
@@ -115,6 +129,17 @@ export const HouseListings: React.FC = () => {
       bathrooms: listing.bathrooms,
       sqft: listing.sqft,
       imageUrl: listing.imageUrl,
+      // Extended fields for the AI summary
+      yearBuilt: listing.yearBuilt,
+      propertyType: listing.propertyType,
+      garage: listing.garage,
+      pool: listing.pool,
+      stories: listing.stories,
+      lotSizeSqft: listing.lotSizeSqft,
+      hoaMonthly: listing.hoaMonthly,
+      daysOnMarket: listing.daysOnMarket,
+      pricePerSqft: listing.pricePerSqft,
+      description: listing.description,
     });
     navigate('/summary');
   };
@@ -132,6 +157,22 @@ export const HouseListings: React.FC = () => {
           <ChevronLeft className="w-4 h-4" />
           Back to Listings
         </button>
+
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-1">
+            <h1 className="text-3xl font-bold text-slate-100">Live Redfin Listing</h1>
+            <span className="px-2.5 py-1 bg-blue-500/10 text-blue-400 text-xs font-bold rounded-full border border-blue-800/40 uppercase tracking-wide">
+              Real Data
+            </span>
+          </div>
+          <p className="text-slate-400">
+            Best match found for{' '}
+            <span className="text-[#1AAFD4] font-semibold">{selectedNeighborhood.name}</span>
+            <span className="ml-2 px-2.5 py-0.5 bg-[#1AAFD4]/10 text-[#1AAFD4] text-sm font-semibold rounded-full border border-[#1AAFD4]/30">
+              {selectedNeighborhood.matchScore}% match
+            </span>
+          </p>
+        </div>
 
         <div className="bg-slate-800 rounded-2xl overflow-hidden border border-slate-700 shadow-xl shadow-black/40">
 
@@ -223,10 +264,10 @@ export const HouseListings: React.FC = () => {
               </div>
             )}
 
-            {appreciationData && !appreciationLoading && (
+            {localAppreciationData && !appreciationLoading && (
               <div className="mb-5">
                 <AppreciationChart
-                  projections={appreciationData.projections}
+                  projections={localAppreciationData.projections}
                   currentPrice={listing.price}
                 />
               </div>

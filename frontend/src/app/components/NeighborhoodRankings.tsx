@@ -121,6 +121,7 @@ export const NeighborhoodRankings: React.FC = () => {
     const neighborhood: Neighborhood = {
       id: n.id, name: n.name, matchScore: n.matchScore,
       tags: n.tags, location: n.location,
+      features: n.features,
     };
     setSelectedNeighborhood(neighborhood);
     navigate('/listings');

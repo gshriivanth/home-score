@@ -1,11 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { usePreferences } from '../context/PreferencesContext';
-import { generateCostProjections, generateLLMSummary } from '../data/mockData';
+import { generateSummary } from '../api';
+import { generateCostProjections } from '../data/mockData';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar,
 } from 'recharts';
-import { ArrowLeft, Home as HomeIcon, TrendingUp, Wrench, DollarSign, RefreshCw } from 'lucide-react';
+import {
+  ArrowLeft, Home as HomeIcon, TrendingUp, Wrench, DollarSign, RefreshCw,
+  Sparkles, AlertCircle,
+} from 'lucide-react';
 
 const fmt = (n: number) =>
   n >= 1000000 ? `$${(n / 1000000).toFixed(2)}M` : `$${(n / 1000).toFixed(0)}K`;
@@ -18,12 +22,80 @@ const tooltipStyle = {
   fontSize: 12,
 };
 
+// ── Skeleton lines for the loading state ─────────────────────────────────────
+
+const SkeletonLine: React.FC<{ width?: string }> = ({ width = 'w-full' }) => (
+  <div className={`h-3 rounded-full bg-[#484848] animate-pulse ${width}`} />
+);
+
+const SummarySkeletonBlock: React.FC = () => (
+  <div className="space-y-3">
+    <SkeletonLine />
+    <SkeletonLine width="w-11/12" />
+    <SkeletonLine width="w-4/5" />
+    <div className="pt-1" />
+    <SkeletonLine />
+    <SkeletonLine width="w-10/12" />
+    <SkeletonLine width="w-3/4" />
+    <div className="pt-1" />
+    <SkeletonLine />
+    <SkeletonLine width="w-11/12" />
+    <SkeletonLine width="w-5/6" />
+    <div className="pt-1" />
+    <SkeletonLine />
+    <SkeletonLine width="w-9/12" />
+  </div>
+);
+
+// ── Streaming text display ────────────────────────────────────────────────────
+
+function useWordStream(fullText: string, active: boolean) {
+  const [displayed, setDisplayed] = useState('');
+  const [done, setDone] = useState(false);
+  const indexRef = useRef(0);
+
+  useEffect(() => {
+    if (!active || !fullText) return;
+    setDisplayed('');
+    setDone(false);
+    indexRef.current = 0;
+
+    const words = fullText.split(' ');
+
+    const tick = () => {
+      if (indexRef.current >= words.length) {
+        setDone(true);
+        return;
+      }
+      setDisplayed(words.slice(0, indexRef.current + 1).join(' '));
+      indexRef.current += 1;
+      setTimeout(tick, 18);
+    };
+
+    tick();
+  }, [fullText, active]);
+
+  return { displayed, done };
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
 export const CostSummary: React.FC = () => {
   const navigate = useNavigate();
-  const { selectedNeighborhood, selectedListing } = usePreferences();
-  const [streamedText, setStreamedText] = useState({ neighborhood: '', house: '', costs: '' });
-  const [isStreaming, setIsStreaming] = useState(true);
+  const {
+    selectedNeighborhood,
+    selectedListing,
+    appreciationData,
+    rankedPriorities,
+    houseRequirements,
+    city,
+  } = usePreferences();
+
   const [activeTab, setActiveTab] = useState<'future' | 'maintenance' | 'monthly'>('future');
+  const [summaryText, setSummaryText] = useState('');
+  const [summaryLoading, setSummaryLoading] = useState(true);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [streamActive, setStreamActive] = useState(false);
 
   if (!selectedNeighborhood || !selectedListing) {
     navigate('/neighborhoods');
@@ -31,7 +103,6 @@ export const CostSummary: React.FC = () => {
   }
 
   const costData = generateCostProjections(selectedListing.price);
-  const summary = generateLLMSummary(selectedNeighborhood, selectedListing);
 
   const futurePriceChart = costData.futurePrices.map((d) => ({
     year: `Year ${d.year}`,
@@ -60,27 +131,69 @@ export const CostSummary: React.FC = () => {
     { label: 'Maintenance Reserve', value: costData.monthlyBreakdown.maintenance, color: '#1F3F63' },
   ];
 
+  // Parse city/state for the API call
+  function parseCityState(input: string): { city: string; state: string } {
+    const m = input.trim().match(/^(.+),\s*([A-Za-z]{2})$/);
+    if (m) return { city: m[1].trim(), state: m[2].toUpperCase() };
+    return { city: input.trim(), state: 'CA' };
+  }
+  const { city: parsedCity, state } = parseCityState(city);
+
+  // Fetch Gemini summary on mount
   useEffect(() => {
-    const streamText = async () => {
-      const sections = [
-        { key: 'neighborhood' as const, text: summary.neighborhoodMatch },
-        { key: 'house' as const, text: summary.houseFit },
-        { key: 'costs' as const, text: summary.futureCosts },
-      ];
-      for (const section of sections) {
-        const words = section.text.split(' ');
-        for (let i = 0; i < words.length; i++) {
-          await new Promise((resolve) => setTimeout(resolve, 25));
-          setStreamedText((prev) => ({ ...prev, [section.key]: words.slice(0, i + 1).join(' ') }));
-        }
-      }
-      setIsStreaming(false);
-    };
-    streamText();
+    setSummaryLoading(true);
+    setSummaryError(null);
+    setSummaryText('');
+    setStreamActive(false);
+
+    generateSummary({
+      city: parsedCity,
+      state,
+      ranked_priorities: rankedPriorities,
+      house_requirements: houseRequirements as unknown as Record<string, unknown>,
+
+      neighborhood_name: selectedNeighborhood.name,
+      neighborhood_match_score: selectedNeighborhood.matchScore,
+      neighborhood_zip: selectedNeighborhood.id,
+      neighborhood_tags: selectedNeighborhood.tags,
+      neighborhood_features: selectedNeighborhood.features,
+
+      listing_address: selectedListing.address,
+      listing_price: selectedListing.price,
+      listing_bedrooms: selectedListing.bedrooms,
+      listing_bathrooms: selectedListing.bathrooms,
+      listing_sqft: selectedListing.sqft,
+      listing_year_built: selectedListing.yearBuilt,
+      listing_property_type: selectedListing.propertyType,
+      listing_garage: selectedListing.garage,
+      listing_pool: selectedListing.pool,
+      listing_stories: selectedListing.stories,
+      listing_lot_size_sqft: selectedListing.lotSizeSqft,
+      listing_hoa_monthly: selectedListing.hoaMonthly,
+      listing_days_on_market: selectedListing.daysOnMarket,
+      listing_price_per_sqft: selectedListing.pricePerSqft,
+      listing_description: selectedListing.description,
+
+      appreciation_projections: appreciationData ?? undefined,
+
+      monthly_mortgage: costData.monthlyBreakdown.mortgage,
+      monthly_property_tax: costData.monthlyBreakdown.propertyTax,
+      monthly_insurance: costData.monthlyBreakdown.insurance,
+      monthly_hoa: costData.monthlyBreakdown.hoa,
+      monthly_maintenance: costData.monthlyBreakdown.maintenance,
+    })
+      .then((text) => {
+        setSummaryText(text);
+        setSummaryLoading(false);
+        setStreamActive(true);
+      })
+      .catch((err: Error) => {
+        setSummaryError(err.message);
+        setSummaryLoading(false);
+      });
   }, []);
 
-  const cursor = (text: string, full: string) =>
-    isStreaming && text.length > 0 && text.length < full.length ? '▋' : '';
+  const { displayed: streamedSummary, done: streamDone } = useWordStream(summaryText, streamActive);
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-10">
@@ -178,7 +291,6 @@ export const CostSummary: React.FC = () => {
                       <Area type="monotone" dataKey="Worst Case" stroke="#f87171" fill="url(#gradWorst)" strokeWidth={2} />
                     </AreaChart>
                   </ResponsiveContainer>
-                  <p className="text-xs text-slate-600 mt-3 text-center">Placeholder — will use live market data once backend connected</p>
                 </>
               )}
 
@@ -241,33 +353,84 @@ export const CostSummary: React.FC = () => {
           </div>
         </div>
 
-        {/* Right: AI summary */}
-        <div className="space-y-5">
-          {[
-            { key: 'neighborhood' as const, label: 'Neighborhood Match', Icon: HomeIcon, text: streamedText.neighborhood, full: summary.neighborhoodMatch },
-            { key: 'house' as const, label: 'Home Fit', Icon: TrendingUp, text: streamedText.house, full: summary.houseFit },
-            { key: 'costs' as const, label: 'Future Costs', Icon: Wrench, text: streamedText.costs, full: summary.futureCosts },
-          ].map(({ key, label, Icon, text, full }) => (
-            <div key={key} className="bg-[#3A3A3A] rounded-xl p-6 border border-[#484848]">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-9 h-9 rounded-lg bg-[#1AAFD4]/10 flex items-center justify-center">
-                  <Icon className="w-5 h-5 text-[#1AAFD4]" />
-                </div>
-                <h3 className="font-semibold text-slate-100">{label}</h3>
-                {isStreaming && text.length === 0 && key === 'neighborhood' && (
-                  <div className="ml-auto flex gap-1">
-                    {[0, 150, 300].map((delay) => (
-                      <div key={delay} className="w-1.5 h-1.5 bg-[#1AAFD4] rounded-full animate-bounce" style={{ animationDelay: `${delay}ms` }} />
-                    ))}
-                  </div>
-                )}
+        {/* Right: Gemini AI Analysis */}
+        <div className="flex flex-col gap-5">
+          {/* AI Analysis card */}
+          <div className="flex-1 bg-[#2B2B2B] rounded-xl border border-[#484848] overflow-hidden flex flex-col"
+               style={{ minHeight: 420 }}>
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-[#484848] flex items-center gap-3"
+                 style={{ background: 'linear-gradient(135deg, rgba(26,175,212,0.08) 0%, rgba(26,175,212,0.02) 100%)' }}>
+              <div className="w-8 h-8 rounded-lg bg-[#1AAFD4]/15 flex items-center justify-center shrink-0">
+                <Sparkles className="w-4 h-4 text-[#1AAFD4]" />
               </div>
-              <p className="text-slate-400 text-sm leading-relaxed">
-                {text}{cursor(text, full)}
-              </p>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-semibold text-slate-100 text-sm leading-none mb-0.5">AI Analysis</h3>
+                <p className="text-slate-500 text-xs">Personalized explanation of your recommendation</p>
+              </div>
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#1AAFD4]/10 border border-[#1AAFD4]/20 shrink-0">
+                <div className="w-1.5 h-1.5 rounded-full bg-[#1AAFD4] animate-pulse" />
+                <span className="text-[#1AAFD4] text-xs font-medium">AI</span>
+              </div>
             </div>
-          ))}
 
+            {/* Content area */}
+            <div className="flex-1 p-5 overflow-y-auto">
+              {summaryLoading && (
+                <div>
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="flex gap-1">
+                      {[0, 150, 300].map((d) => (
+                        <div
+                          key={d}
+                          className="w-1.5 h-1.5 rounded-full bg-[#1AAFD4] animate-bounce"
+                          style={{ animationDelay: `${d}ms` }}
+                        />
+                      ))}
+                    </div>
+                    <span className="text-slate-500 text-xs">Analyzing your data...</span>
+                  </div>
+                  <SummarySkeletonBlock />
+                </div>
+              )}
+
+              {summaryError && !summaryLoading && (
+                <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-8">
+                  <AlertCircle className="w-8 h-8 text-red-400/70" />
+                  <div>
+                    <p className="text-slate-400 text-sm font-medium mb-1">Could not generate analysis</p>
+                    <p className="text-slate-600 text-xs font-mono">{summaryError}</p>
+                  </div>
+                </div>
+              )}
+
+              {!summaryLoading && !summaryError && (
+                <div className="text-slate-300 text-sm leading-relaxed space-y-4">
+                  {(streamActive ? streamedSummary : summaryText)
+                    .split('\n\n')
+                    .filter(Boolean)
+                    .map((para, i) => (
+                      <p key={i}>{para}</p>
+                    ))}
+                  {streamActive && !streamDone && (
+                    <span className="inline-block w-0.5 h-4 bg-[#1AAFD4] animate-pulse align-middle ml-0.5" />
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            {!summaryLoading && !summaryError && (
+              <div className="px-5 py-3 border-t border-[#484848] flex items-center justify-between">
+                <span className="text-slate-600 text-xs">
+                  Based on Census ACS · FBI CDE · FRED · XGBoost ML
+                </span>
+                <HomeIcon className="w-3.5 h-3.5 text-slate-600" />
+              </div>
+            )}
+          </div>
+
+          {/* Action buttons */}
           <div className="flex gap-3">
             <button
               onClick={() => navigate('/')}

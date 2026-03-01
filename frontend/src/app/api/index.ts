@@ -85,6 +85,13 @@ function buildFeatureWeights(rankedPriorities: string[]): FeatureWeight[] {
 // ─── Response types ───────────────────────────────────────────────────────────
 
 
+export interface ApiNeighborhoodFeature {
+  raw_value: number | null;
+  z_score: number | null;
+  weight: number;
+  contribution: number | null;
+}
+
 export interface ApiNeighborhood {
   id: string;           // ZIP code
   name: string;         // "ZIP 92617"
@@ -93,6 +100,7 @@ export interface ApiNeighborhood {
   location: { lat: number; lng: number };
   zip: string;
   score: number;        // raw weighted z-score
+  features?: Record<string, ApiNeighborhoodFeature>;
 }
 
 
@@ -258,4 +266,65 @@ export async function predictAppreciation(
   }
 
   return response.json() as Promise<AppreciationPredictionResponse>;
+}
+
+
+// ─── AI Summary types + call ──────────────────────────────────────────────────
+
+export interface SummaryRequest {
+  city: string;
+  state: string;
+  ranked_priorities: string[];
+  house_requirements: Record<string, unknown>;
+
+  neighborhood_name: string;
+  neighborhood_match_score: number;
+  neighborhood_zip: string;
+  neighborhood_tags: string[];
+  neighborhood_features?: Record<string, { raw_value: number | null; z_score: number | null; weight: number; contribution: number | null }>;
+
+  listing_address: string;
+  listing_price: number;
+  listing_bedrooms: number;
+  listing_bathrooms: number;
+  listing_sqft: number;
+  listing_year_built?: number;
+  listing_property_type?: string;
+  listing_garage?: boolean;
+  listing_pool?: boolean;
+  listing_stories?: number;
+  listing_lot_size_sqft?: number;
+  listing_hoa_monthly?: number;
+  listing_days_on_market?: number;
+  listing_price_per_sqft?: number;
+  listing_description?: string;
+
+  appreciation_projections?: Array<{
+    months: number;
+    best: { appreciation_pct: number; projected_value: number | null };
+    avg: { appreciation_pct: number; projected_value: number | null };
+    worst: { appreciation_pct: number; projected_value: number | null };
+  }>;
+
+  monthly_mortgage?: number;
+  monthly_property_tax?: number;
+  monthly_insurance?: number;
+  monthly_hoa?: number;
+  monthly_maintenance?: number;
+}
+
+export async function generateSummary(req: SummaryRequest): Promise<string> {
+  const response = await fetch(`${BASE_URL}/generate-summary`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => response.statusText);
+    throw new Error(`Summary API ${response.status}: ${text}`);
+  }
+
+  const data = await response.json() as { summary: string };
+  return data.summary;
 }
