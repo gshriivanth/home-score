@@ -3,7 +3,7 @@ import { Outlet } from 'react-router';
 import { Header } from './components/Header';
 
 export const Layout: React.FC = () => (
-  <div className="min-h-screen bg-slate-900">
+  <div className="min-h-screen bg-[#2B2B2B]">
     <Header />
     <Outlet />
   </div>

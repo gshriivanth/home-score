@@ -19,10 +19,10 @@ function ButtonGroup<T extends string | number>({
         <button
           key={String(opt.value)}
           onClick={() => onChange(opt.value)}
-          className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
             value === opt.value
-              ? 'bg-emerald-500 text-slate-900'
-              : 'bg-slate-700 text-slate-300 hover:bg-slate-600 hover:text-slate-100'
+              ? 'bg-[#1AAFD4] text-[#1a1a1a]'
+              : 'bg-[#454545] text-slate-300 hover:bg-[#555555] hover:text-slate-100'
           }`}
         >
           {opt.label}
@@ -40,13 +40,13 @@ export const PreferenceIntake: React.FC = () => {
     setHouseRequirements({ ...houseRequirements, ...updates });
 
   const inputClass =
-    'w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500';
+    'w-full bg-[#454545] border border-[#555555] rounded-lg px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#1AAFD4] focus:border-[#1AAFD4]';
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-10">
       <button
         onClick={() => navigate('/priorities')}
-        className="flex items-center gap-2 text-slate-400 hover:text-emerald-400 transition-colors text-sm font-medium mb-6"
+        className="flex items-center gap-2 text-slate-400 hover:text-[#1AAFD4] transition-colors text-sm font-medium mb-6"
       >
         <ArrowLeft className="w-4 h-4" />
         Back to Priorities
@@ -59,7 +59,7 @@ export const PreferenceIntake: React.FC = () => {
 
       <div className="space-y-5">
         {/* The Basics */}
-        <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700">
+        <div className="bg-[#3A3A3A] rounded-xl p-6 border border-[#484848]">
           <h3 className="text-lg font-semibold text-slate-100 mb-5">The Basics</h3>
           <div className="grid md:grid-cols-2 gap-6">
             <div>
@@ -69,10 +69,10 @@ export const PreferenceIntake: React.FC = () => {
                   <button
                     key={n}
                     onClick={() => update({ bedrooms: n })}
-                    className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                    className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                       houseRequirements.bedrooms === n
-                        ? 'bg-emerald-500 text-slate-900'
-                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                        ? 'bg-[#1AAFD4] text-[#1a1a1a]'
+                        : 'bg-[#454545] text-slate-300 hover:bg-[#555555]'
                     }`}
                   >
                     {n === 5 ? '5+' : n}
@@ -88,10 +88,10 @@ export const PreferenceIntake: React.FC = () => {
                   <button
                     key={n}
                     onClick={() => update({ bathrooms: n })}
-                    className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                    className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                       houseRequirements.bathrooms === n
-                        ? 'bg-emerald-500 text-slate-900'
-                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                        ? 'bg-[#1AAFD4] text-[#1a1a1a]'
+                        : 'bg-[#454545] text-slate-300 hover:bg-[#555555]'
                     }`}
                   >
                     {n === 4 ? '4+' : n}
@@ -131,7 +131,7 @@ export const PreferenceIntake: React.FC = () => {
         </div>
 
         {/* Budget */}
-        <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700">
+        <div className="bg-[#3A3A3A] rounded-xl p-6 border border-[#484848]">
           <h3 className="text-lg font-semibold text-slate-100 mb-5">Your Budget</h3>
           <div className="grid md:grid-cols-2 gap-6">
             <div>
@@ -166,7 +166,7 @@ export const PreferenceIntake: React.FC = () => {
         </div>
 
         {/* Size & Lot */}
-        <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700">
+        <div className="bg-[#3A3A3A] rounded-xl p-6 border border-[#484848]">
           <h3 className="text-lg font-semibold text-slate-100 mb-5">Size & Lot</h3>
           <div className="grid md:grid-cols-2 gap-6">
             <div>
@@ -214,7 +214,7 @@ export const PreferenceIntake: React.FC = () => {
         </div>
 
         {/* Features & Age */}
-        <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700">
+        <div className="bg-[#3A3A3A] rounded-xl p-6 border border-[#484848]">
           <h3 className="text-lg font-semibold text-slate-100 mb-5">Features & Age</h3>
           <div className="grid md:grid-cols-3 gap-6">
             <div>
@@ -222,16 +222,16 @@ export const PreferenceIntake: React.FC = () => {
               <div className="flex gap-2">
                 <button
                   onClick={() => update({ garage: false })}
-                  className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                    !houseRequirements.garage ? 'bg-emerald-500 text-slate-900' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                    !houseRequirements.garage ? 'bg-[#1AAFD4] text-[#1a1a1a]' : 'bg-[#454545] text-slate-300 hover:bg-[#555555]'
                   }`}
                 >
                   Not needed
                 </button>
                 <button
                   onClick={() => update({ garage: true })}
-                  className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                    houseRequirements.garage ? 'bg-emerald-500 text-slate-900' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                    houseRequirements.garage ? 'bg-[#1AAFD4] text-[#1a1a1a]' : 'bg-[#454545] text-slate-300 hover:bg-[#555555]'
                   }`}
                 >
                   Required
@@ -244,16 +244,16 @@ export const PreferenceIntake: React.FC = () => {
               <div className="flex gap-2">
                 <button
                   onClick={() => update({ pool: false })}
-                  className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                    !houseRequirements.pool ? 'bg-emerald-500 text-slate-900' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                    !houseRequirements.pool ? 'bg-[#1AAFD4] text-[#1a1a1a]' : 'bg-[#454545] text-slate-300 hover:bg-[#555555]'
                   }`}
                 >
                   Not needed
                 </button>
                 <button
                   onClick={() => update({ pool: true })}
-                  className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                    houseRequirements.pool ? 'bg-emerald-500 text-slate-900' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                    houseRequirements.pool ? 'bg-[#1AAFD4] text-[#1a1a1a]' : 'bg-[#454545] text-slate-300 hover:bg-[#555555]'
                   }`}
                 >
                   Required
@@ -282,7 +282,7 @@ export const PreferenceIntake: React.FC = () => {
       <div className="mt-8 flex justify-end">
         <button
           onClick={() => navigate('/neighborhoods')}
-          className="px-10 py-3.5 rounded-full bg-emerald-500 hover:bg-emerald-600 text-slate-900 font-semibold text-base transition-colors"
+          className="px-10 py-3.5 rounded-lg bg-[#1AAFD4] hover:bg-[#1788B2] text-[#1a1a1a] font-semibold text-base transition-colors"
         >
           Find My Neighborhoods →
         </button>
