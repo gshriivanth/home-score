@@ -1,4 +1,4 @@
-import { Component, type ReactNode } from 'react';
+    import { Component, type ReactNode } from 'react';
 import { RouterProvider } from 'react-router';
 import { router } from './routes';
 import { PreferencesProvider } from './context/PreferencesContext';

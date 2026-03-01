@@ -39,7 +39,7 @@ from census import SUPPORTED_FEATURES as _ACS_FEATURES
 from census import STATE_FIPS, fetch_acs_data
 from fbi import SUPPORTED_FEATURES as _CRIME_FEATURES
 from fbi import fetch_crime_data
-from geo import lookup_zips_for_city
+from geo import lookup_zip_centroids, lookup_zips_for_city
 from models import (
     FeatureBreakdown,
     NeighborhoodLocation,
@@ -319,12 +319,20 @@ async def rank_neighborhoods_endpoint(req: RankZipsRequest) -> RankNeighborhoods
 
         { id, name, matchScore, tags, location, zip, score, features }
 
-    Location is a placeholder centroid (0, 0) — integrate a geocoder or
-    ZCTA centroid lookup for real coordinates.
+    Location is populated from ZIP centroid lookups via Zippopotam.us.
+    If lookup fails for a ZIP, location falls back to (0, 0).
     """
     ranked, warnings = await _run_pipeline(req)
 
     all_scores = [r["score"] for r in ranked]
+    ranked_zip_codes = [r["zip"] for r in ranked]
+    zip_centroids = await lookup_zip_centroids(ranked_zip_codes)
+    missing_coords = [z for z in ranked_zip_codes if z not in zip_centroids]
+    if missing_coords:
+        warnings.append(
+            f"Could not resolve coordinates for {len(missing_coords)} ZIP(s); "
+            "those markers use map fallback positions."
+        )
 
     neighborhoods: List[NeighborhoodResult] = []
     for r in ranked:
@@ -346,7 +354,10 @@ async def rank_neighborhoods_endpoint(req: RankZipsRequest) -> RankNeighborhoods
                 name=f"ZIP {r['zip']}",
                 matchScore=match_score,
                 tags=tags,
-                location=NeighborhoodLocation(lat=0.0, lng=0.0),  # placeholder
+                location=NeighborhoodLocation(
+                    lat=zip_centroids.get(r["zip"], (0.0, 0.0))[0],
+                    lng=zip_centroids.get(r["zip"], (0.0, 0.0))[1],
+                ),
                 zip=r["zip"],
                 score=r["score"],
                 features=features_bd,

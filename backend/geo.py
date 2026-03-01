@@ -1,5 +1,5 @@
 """
-City-to-ZIP resolver.
+City-to-ZIP and ZIP-to-coordinate resolver.
 
 Strategy
 --------
@@ -14,8 +14,8 @@ Zippopotam.us example:
 """
 from __future__ import annotations
 
-import re
-from typing import List, Optional
+import asyncio
+from typing import Dict, List, Optional, Tuple
 
 import httpx
 
@@ -50,3 +50,47 @@ async def lookup_zips_for_city(city: str, state: str) -> Optional[List[str]]:
         pass
 
     return None
+
+
+async def lookup_zip_centroid(zip_code: str) -> Optional[Tuple[float, float]]:
+    """
+    Resolve a US ZIP code to a latitude/longitude pair using Zippopotam.us.
+    Returns (lat, lng) or None if not available.
+    """
+    url = f"{ZIPPOPOTAM_BASE}/{zip_code.strip()}"
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
+            resp = await client.get(url)
+            if resp.status_code != 200:
+                return None
+            body = resp.json()
+            places = body.get("places", [])
+            if not places:
+                return None
+            place0 = places[0]
+            lat_s = place0.get("latitude")
+            lng_s = place0.get("longitude")
+            if lat_s is None or lng_s is None:
+                return None
+            return (float(lat_s), float(lng_s))
+    except (httpx.HTTPError, ValueError, TypeError, Exception):
+        return None
+
+
+async def lookup_zip_centroids(zip_codes: List[str]) -> Dict[str, Tuple[float, float]]:
+    """
+    Resolve many ZIP codes to centroids concurrently.
+    Returns only ZIPs that could be resolved.
+    """
+    if not zip_codes:
+        return {}
+
+    tasks = [lookup_zip_centroid(z) for z in zip_codes]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    centroids: Dict[str, Tuple[float, float]] = {}
+    for zip_code, result in zip(zip_codes, results):
+        if isinstance(result, Exception) or result is None:
+            continue
+        centroids[zip_code] = result
+    return centroids
