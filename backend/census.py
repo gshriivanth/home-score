@@ -3,11 +3,11 @@ Async Census ACS 5-year API client with in-memory TTL cache.
 
 Supported features and their ACS variable mappings
 ---------------------------------------------------
-income            B19013_001E                       — median household income ($)
-median_rent       B25064_001E                       — median gross rent ($/mo)
-median_home_value B25077_001E                       — median home value ($)
-commute_time      B08136_001E / B08303_001E         — mean travel time to work (min)
-pct_bachelors     (B15003_022-025E) / B15003_001E   — share of 25+ with bachelor's+
+income                    B19013_001E                          — median household income ($)
+commute_time              B08136_001E / B08303_001E            — mean travel time to work (min)
+pct_bachelors             (B15003_022-025E) / B15003_001E      — share of 25+ with bachelor's+
+pct_households_children   B11005_002E / B11005_001E            — share of households with children <18
+racial_diversity_index    1 - Σ(B02001_00xE/total)²           — Herfindahl diversity index (0=homogeneous, 1=diverse)
 """
 from __future__ import annotations
 
@@ -30,12 +30,19 @@ _CENSUS_NULL_SENTINEL = {"-666666666", "-666666666.0", -666666666, -666666666.0}
 
 # All raw ACS variables we ever fetch, grouped by derived feature name
 _FEATURE_VARS: Dict[str, List[str]] = {
-    "income":            ["B19013_001E"],
-    "median_rent":       ["B25064_001E"],
-    "median_home_value": ["B25077_001E"],
-    "commute_time":      ["B08136_001E", "B08303_001E"],  # aggregate minutes, total commuters
-    "pct_bachelors":     ["B15003_022E", "B15003_023E", "B15003_024E", "B15003_025E",
-                          "B15003_001E"],
+    "income":                  ["B19013_001E"],
+    "commute_time":            ["B08136_001E", "B08303_001E"],  # aggregate minutes, total commuters
+    "pct_bachelors":           ["B15003_022E", "B15003_023E", "B15003_024E", "B15003_025E",
+                                "B15003_001E"],
+    "pct_households_children": ["B11005_002E", "B11005_001E"],  # with_children, total households
+    "racial_diversity_index":  ["B02001_001E",  # total population
+                                "B02001_002E",  # White alone
+                                "B02001_003E",  # Black or African American alone
+                                "B02001_004E",  # American Indian and Alaska Native alone
+                                "B02001_005E",  # Asian alone
+                                "B02001_006E",  # Native Hawaiian and Other Pacific Islander alone
+                                "B02001_007E",  # Some other race alone
+                                "B02001_008E"], # Two or more races
 }
 
 SUPPORTED_FEATURES = set(_FEATURE_VARS.keys())
@@ -110,12 +117,6 @@ def _derive_features(
         if fname == "income":
             out[fname] = raw.get("B19013_001E")
 
-        elif fname == "median_rent":
-            out[fname] = raw.get("B25064_001E")
-
-        elif fname == "median_home_value":
-            out[fname] = raw.get("B25077_001E")
-
         elif fname == "commute_time":
             agg = raw.get("B08136_001E")      # aggregate minutes
             n = raw.get("B08303_001E")        # total commuters
@@ -132,6 +133,24 @@ def _derive_features(
                     for v in ["B15003_022E", "B15003_023E", "B15003_024E", "B15003_025E"]
                 )
                 out[fname] = higher_ed / total
+            else:
+                out[fname] = None
+
+        elif fname == "pct_households_children":
+            total_hh = raw.get("B11005_001E")
+            with_children = raw.get("B11005_002E")
+            if total_hh and total_hh > 0 and with_children is not None:
+                out[fname] = with_children / total_hh
+            else:
+                out[fname] = None
+
+        elif fname == "racial_diversity_index":
+            total = raw.get("B02001_001E")
+            if total and total > 0:
+                race_vars = ["B02001_002E", "B02001_003E", "B02001_004E",
+                             "B02001_005E", "B02001_006E", "B02001_007E", "B02001_008E"]
+                sum_sq = sum((raw.get(v) or 0.0) ** 2 for v in race_vars) / (total ** 2)
+                out[fname] = 1.0 - sum_sq
             else:
                 out[fname] = None
 

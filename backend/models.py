@@ -25,7 +25,7 @@ class RankZipsRequest(BaseModel):
     POST /rank-zips request body.
 
     Features must reference at least one of the supported ACS feature names:
-        income | median_rent | median_home_value | commute_time | pct_bachelors
+        income | commute_time | pct_bachelors
 
     Weights are normalised server-side if they don't sum to exactly 1.0.
     """
