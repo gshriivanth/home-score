@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import L from 'leaflet';
 import { usePreferences } from '../context/PreferencesContext';
 import type { Neighborhood } from '../context/PreferencesContext';
 import { mockNeighborhoods } from '../data/mockData';
@@ -7,42 +9,57 @@ import { rankNeighborhoods } from '../api';
 import type { ApiNeighborhood } from '../api';
 import { ArrowLeft, MapPin, Loader2, AlertTriangle } from 'lucide-react';
 
-// ─── Map constants ─────────────────────────────────────────────────────────────
-const MAP_W = 560;
-const MAP_H = 360;
+// ─── Leaflet marker icons ──────────────────────────────────────────────────────
 
-// Decorative map: evenly distributed marker positions used when the backend
-// returns placeholder lat/lng (0, 0) for ZIP-based results.
-const MARKER_POSITIONS = [
-  { x: 100, y: 130 },
-  { x: 250, y: 80  },
-  { x: 400, y: 150 },
-  { x: 170, y: 215 },
-  { x: 320, y: 245 },
-  { x: 460, y: 100 },
-  { x: 80,  y: 270 },
-  { x: 220, y: 310 },
-  { x: 380, y: 285 },
-  { x: 500, y: 195 },
-  { x: 150, y: 175 },
-  { x: 290, y: 145 },
-];
+function makeIcon(rank: number, hovered: boolean) {
+  const bg = hovered ? '#059669' : '#10b981';
+  const size = hovered ? 36 : 30;
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+      <circle cx="${size / 2}" cy="${size / 2}" r="${size / 2 - 2}" fill="${bg}" stroke="#0f172a" stroke-width="2"/>
+      <text x="${size / 2}" y="${size / 2 + 4}" text-anchor="middle" fill="#f0fdf4"
+        font-size="${size < 34 ? 11 : 13}" font-weight="700" font-family="Inter,sans-serif">${rank}</text>
+    </svg>`;
+  return L.divIcon({
+    html: svg,
+    className: '',
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+    popupAnchor: [0, -(size / 2 + 4)],
+  });
+}
 
-const LAT_MIN = 37.7449, LAT_MAX = 37.7949;
-const LNG_MIN = -122.4494, LNG_MAX = -122.3994;
-const MARGIN = 30;
+// ─── Recenter map when city geocode resolves ───────────────────────────────────
 
-function getMarkerPos(n: ApiNeighborhood, index: number) {
-  if (n.location.lat !== 0 || n.location.lng !== 0) {
-    return {
-      x: ((n.location.lng - LNG_MIN) / (LNG_MAX - LNG_MIN)) * (MAP_W - MARGIN * 2) + MARGIN,
-      y: ((LAT_MAX - n.location.lat) / (LAT_MAX - LAT_MIN)) * (MAP_H - MARGIN * 2) + MARGIN,
-    };
+function MapController({ center, zoom }: { center: [number, number]; zoom: number }) {
+  const map = useMap();
+  useEffect(() => {
+    map.setView(center, zoom, { animate: true });
+  }, [center, zoom, map]);
+  return null;
+}
+
+// ─── Geocode city name → lat/lng via Nominatim (free, no key) ────────────────
+
+async function geocodeCity(city: string): Promise<[number, number] | null> {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`,
+      { headers: { 'Accept-Language': 'en' } },
+    );
+    const data = await res.json() as { lat: string; lon: string }[];
+    if (data.length > 0) return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+  } catch {
+    // ignore
   }
-  return MARKER_POSITIONS[index % MARKER_POSITIONS.length];
+  return null;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
+
+const DEFAULT_CENTER: [number, number] = [37.7749, -122.4194]; // SF fallback
+const DEFAULT_ZOOM = 12;
+
 export const NeighborhoodRankings: React.FC = () => {
   const navigate = useNavigate();
   const { city, rankedPriorities, setSelectedNeighborhood } = usePreferences();
@@ -52,7 +69,21 @@ export const NeighborhoodRankings: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [usingFallback, setUsingFallback] = useState(false);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [mapCenter, setMapCenter] = useState<[number, number]>(DEFAULT_CENTER);
+  const [mapZoom, setMapZoom] = useState(DEFAULT_ZOOM);
 
+  // Geocode the city to center the map
+  useEffect(() => {
+    if (!city) return;
+    geocodeCity(city).then((coords) => {
+      if (coords) {
+        setMapCenter(coords);
+        setMapZoom(12);
+      }
+    });
+  }, [city]);
+
+  // Fetch ranked neighborhoods from backend
   useEffect(() => {
     let cancelled = false;
 
@@ -63,7 +94,15 @@ export const NeighborhoodRankings: React.FC = () => {
 
       try {
         const data = await rankNeighborhoods(city || 'Irvine, CA', rankedPriorities);
-        if (!cancelled) setNeighborhoods(data.neighborhoods);
+        if (!cancelled) {
+          setNeighborhoods(data.neighborhoods);
+          // If the top result has real coordinates, center on it
+          const top = data.neighborhoods[0];
+          if (top?.location.lat !== 0 || top?.location.lng !== 0) {
+            setMapCenter([top.location.lat, top.location.lng]);
+            setMapZoom(13);
+          }
+        }
       } catch (err) {
         if (cancelled) return;
         const msg = err instanceof Error ? err.message : 'Unknown error';
@@ -81,15 +120,21 @@ export const NeighborhoodRankings: React.FC = () => {
 
   const handleSelect = (n: ApiNeighborhood) => {
     const neighborhood: Neighborhood = {
-      id: n.id,
-      name: n.name,
-      matchScore: n.matchScore,
-      tags: n.tags,
-      location: n.location,
+      id: n.id, name: n.name, matchScore: n.matchScore,
+      tags: n.tags, location: n.location,
     };
     setSelectedNeighborhood(neighborhood);
     navigate('/listings');
   };
+
+  // Markers with real coords get placed on the map;
+  // fallback markers spread decoratively around map center.
+  const markersWithCoords = neighborhoods.map((n, i) => {
+    const hasReal = n.location.lat !== 0 || n.location.lng !== 0;
+    const lat = hasReal ? n.location.lat : mapCenter[0] + (i % 3 - 1) * 0.02 + Math.floor(i / 3) * 0.015;
+    const lng = hasReal ? n.location.lng : mapCenter[1] + (i % 3 - 1) * 0.025;
+    return { ...n, lat, lng };
+  });
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-10">
@@ -109,7 +154,6 @@ export const NeighborhoodRankings: React.FC = () => {
         </p>
       </div>
 
-      {/* Loading state */}
       {loading && (
         <div className="flex flex-col items-center justify-center py-24 gap-4 text-slate-500">
           <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
@@ -117,7 +161,6 @@ export const NeighborhoodRankings: React.FC = () => {
         </div>
       )}
 
-      {/* Error / fallback banner */}
       {!loading && error && (
         <div className="flex items-start gap-3 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 mb-6 text-sm text-amber-400">
           <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
@@ -130,7 +173,6 @@ export const NeighborhoodRankings: React.FC = () => {
         </div>
       )}
 
-      {/* Results grid */}
       {!loading && neighborhoods.length > 0 && (
         <div className="grid lg:grid-cols-5 gap-8">
           {/* Neighborhood list */}
@@ -139,7 +181,11 @@ export const NeighborhoodRankings: React.FC = () => {
               <button
                 key={n.id}
                 onClick={() => handleSelect(n)}
-                onMouseEnter={() => setHoveredId(n.id)}
+                onMouseEnter={() => {
+                  setHoveredId(n.id);
+                  const m = markersWithCoords[index];
+                  if (m) setMapCenter([m.lat, m.lng]);
+                }}
                 onMouseLeave={() => setHoveredId(null)}
                 className={`w-full bg-slate-800 rounded-xl p-5 border transition-all text-left ${
                   hoveredId === n.id
@@ -159,10 +205,7 @@ export const NeighborhoodRankings: React.FC = () => {
                 </div>
 
                 <div className="h-1.5 bg-slate-700 rounded-full mb-3 overflow-hidden">
-                  <div
-                    className="h-full bg-emerald-500 rounded-full transition-all"
-                    style={{ width: `${n.matchScore}%` }}
-                  />
+                  <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${n.matchScore}%` }} />
                 </div>
 
                 <div className="flex flex-wrap gap-1.5">
@@ -180,95 +223,79 @@ export const NeighborhoodRankings: React.FC = () => {
             ))}
           </div>
 
-          {/* Map */}
+          {/* Real Leaflet map */}
           <div className="lg:col-span-3">
             <div className="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden sticky top-24">
               <div className="px-5 py-4 border-b border-slate-700 flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-emerald-500" />
                 <span className="font-semibold text-slate-100 text-sm">Neighborhood Map</span>
-                <span className="ml-auto text-xs text-slate-500">Click a neighborhood to see listings</span>
+                {usingFallback && (
+                  <span className="ml-auto text-xs text-amber-500">Sample locations</span>
+                )}
+                {!usingFallback && (
+                  <span className="ml-auto text-xs text-slate-500">Click a pin to explore</span>
+                )}
               </div>
-              <div className="p-2">
-                <svg
-                  viewBox={`0 0 ${MAP_W} ${MAP_H}`}
-                  className="w-full rounded-xl"
-                  style={{ background: '#0f172a' }}
+
+              <div className="h-[420px]">
+                <MapContainer
+                  center={mapCenter}
+                  zoom={mapZoom}
+                  style={{ height: '100%', width: '100%', background: '#0f172a' }}
+                  zoomControl={true}
+                  scrollWheelZoom={false}
                 >
-                  {/* Water */}
-                  <path d="M480 0 Q560 40 560 120 L560 0 Z" fill="#1e3a5f" opacity="0.8" />
-                  <path
-                    d="M0 300 Q80 280 160 295 Q240 310 320 300 Q400 290 480 300 L560 295 L560 360 L0 360 Z"
-                    fill="#1e3a5f" opacity="0.7"
+                  <TileLayer
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                   />
-                  {/* Parks */}
-                  <rect x="40"  y="40"  width="70" height="50" rx="4" fill="#064e3b" opacity="0.9" />
-                  <rect x="380" y="60"  width="80" height="55" rx="4" fill="#064e3b" opacity="0.9" />
-                  <rect x="200" y="190" width="55" height="45" rx="4" fill="#064e3b" opacity="0.8" />
-                  <rect x="120" y="100" width="40" height="35" rx="3" fill="#064e3b" opacity="0.7" />
-                  {/* City blocks */}
-                  {[0, 1, 2, 3, 4].map((col) =>
-                    [0, 1, 2, 3].map((row) => {
-                      const bx = 50 + col * 100;
-                      const by = 20 + row * 80;
-                      if ((col === 0 && row === 0) || (col === 3 && row === 0) || (col === 2 && row === 2)) return null;
-                      if (by + 60 > 290) return null;
-                      return <rect key={`${col}-${row}`} x={bx} y={by} width="80" height="60" rx="3" fill="#1e293b" opacity="0.7" />;
-                    }),
-                  )}
-                  {/* Main roads */}
-                  <line x1="0" y1="100" x2={MAP_W} y2="100" stroke="#334155" strokeWidth="5" />
-                  <line x1="0" y1="180" x2={MAP_W} y2="180" stroke="#334155" strokeWidth="5" />
-                  <line x1="0" y1="260" x2={MAP_W} y2="260" stroke="#334155" strokeWidth="4" />
-                  <line x1="140" y1="0" x2="140" y2={MAP_H} stroke="#334155" strokeWidth="5" />
-                  <line x1="280" y1="0" x2="280" y2={MAP_H} stroke="#334155" strokeWidth="5" />
-                  <line x1="420" y1="0" x2="420" y2={MAP_H} stroke="#334155" strokeWidth="4" />
-                  {/* Secondary roads */}
-                  <line x1="0"   y1="140" x2={MAP_W} y2="140" stroke="#1e293b" strokeWidth="2" />
-                  <line x1="0"   y1="220" x2={MAP_W} y2="220" stroke="#1e293b" strokeWidth="2" />
-                  <line x1="70"  y1="0"   x2="70"  y2={MAP_H} stroke="#1e293b" strokeWidth="2" />
-                  <line x1="210" y1="0"   x2="210" y2={MAP_H} stroke="#1e293b" strokeWidth="2" />
-                  <line x1="350" y1="0"   x2="350" y2={MAP_H} stroke="#1e293b" strokeWidth="2" />
-                  <line x1="490" y1="0"   x2="490" y2={MAP_H} stroke="#1e293b" strokeWidth="2" />
-                  {/* Neighborhood markers */}
-                  {neighborhoods.map((n, index) => {
-                    const { x, y } = getMarkerPos(n, index);
-                    const isHovered = hoveredId === n.id;
-                    const r = isHovered ? 16 : 12;
-                    return (
-                      <g
-                        key={n.id}
-                        onClick={() => handleSelect(n)}
-                        onMouseEnter={() => setHoveredId(n.id)}
-                        onMouseLeave={() => setHoveredId(null)}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        {isHovered && <circle cx={x} cy={y} r={r + 8} fill="#10b981" opacity="0.2" />}
-                        <circle cx={x} cy={y} r={r} fill={isHovered ? '#059669' : '#10b981'} stroke="#0f172a" strokeWidth="2.5" />
-                        <text x={x} y={y + 4} textAnchor="middle" fill="#f0fdf4" fontSize="9" fontWeight="bold">{index + 1}</text>
-                        <text x={x} y={y + r + 13} textAnchor="middle" fill="#94a3b8" fontSize="9" fontWeight="600">{n.name.split(' ')[0]}</text>
-                        <text x={x} y={y + r + 22} textAnchor="middle" fill="#10b981" fontSize="8" fontWeight="bold">{Math.round(n.matchScore)}%</text>
-                      </g>
-                    );
-                  })}
-                </svg>
-              </div>
-              <div className="px-5 py-3 border-t border-slate-700 flex items-center gap-4 text-xs text-slate-500">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded-sm bg-emerald-900 border border-emerald-800 inline-block" />Parks
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded-sm bg-blue-900 border border-blue-800 inline-block" />Water
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block" />Neighborhood
-                </span>
+                  <MapController center={mapCenter} zoom={mapZoom} />
+
+                  {markersWithCoords.map((n, index) => (
+                    <Marker
+                      key={n.id}
+                      position={[n.lat, n.lng]}
+                      icon={makeIcon(index + 1, hoveredId === n.id)}
+                      eventHandlers={{
+                        click: () => handleSelect(n),
+                        mouseover: () => setHoveredId(n.id),
+                        mouseout: () => setHoveredId(null),
+                      }}
+                    >
+                      <Popup className="leaflet-dark-popup">
+                        <div style={{ fontFamily: 'Inter, sans-serif', minWidth: 160 }}>
+                          <div style={{ fontWeight: 700, fontSize: 14, color: '#f1f5f9', marginBottom: 4 }}>
+                            {n.name}
+                          </div>
+                          <div style={{ color: '#10b981', fontWeight: 700, fontSize: 18 }}>
+                            {Math.round(n.matchScore)}% match
+                          </div>
+                          {!usingFallback && (
+                            <div style={{ color: '#94a3b8', fontSize: 11, marginTop: 2 }}>
+                              ZIP {n.zip ?? n.id}
+                            </div>
+                          )}
+                          <button
+                            onClick={() => handleSelect(n)}
+                            style={{
+                              marginTop: 8, width: '100%', padding: '6px 0',
+                              background: '#10b981', color: '#0f172a', border: 'none',
+                              borderRadius: 6, fontWeight: 600, fontSize: 12, cursor: 'pointer',
+                            }}
+                          >
+                            View Listings →
+                          </button>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  ))}
+                </MapContainer>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Empty state */}
       {!loading && !error && neighborhoods.length === 0 && (
         <div className="text-center py-24 text-slate-500">
           <p className="text-lg font-medium mb-2">No neighborhoods found</p>

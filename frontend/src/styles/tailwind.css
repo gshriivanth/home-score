@@ -9,4 +9,15 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+
+  /* Dark-tinted map tiles */
+  .leaflet-tile {
+    filter: brightness(0.65) saturate(0.8) hue-rotate(180deg) invert(1);
+  }
+
+  /* Keep our custom markers unfiltered */
+  .leaflet-marker-pane,
+  .leaflet-popup-pane {
+    filter: none !important;
+  }
 }
