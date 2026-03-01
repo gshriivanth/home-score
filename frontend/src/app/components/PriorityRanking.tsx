@@ -56,7 +56,7 @@ export const PriorityRanking: React.FC = () => {
         <button
           onClick={() => navigate('/preferences')}
           disabled={rankedPriorities.length === 0}
-          className="px-7 py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-800 disabled:text-slate-600 text-slate-900 font-semibold text-sm transition-colors shadow-lg shadow-emerald-500/20 whitespace-nowrap"
+          className="px-7 py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-800 disabled:text-slate-600 text-slate-900 font-semibold text-sm transition-colors whitespace-nowrap"
         >
           Next: Home Details →
         </button>
@@ -73,17 +73,17 @@ export const PriorityRanking: React.FC = () => {
               All categories ranked
             </div>
           ) : (
-            <div className="grid sm:grid-cols-2 gap-2">
+            <div className="grid sm:grid-cols-2 gap-3">
               {available.map((cat) => {
                 const Icon = cat.Icon;
                 return (
                   <button
                     key={cat.id}
                     onClick={() => addPriority(cat.id)}
-                    className="flex items-center gap-3 px-4 py-3.5 bg-slate-800 rounded-xl border border-slate-700 hover:border-emerald-500/60 hover:bg-slate-800/80 transition-all text-left group"
+                    className="flex items-center gap-4 px-5 py-5 bg-slate-800 rounded-xl border border-slate-700 hover:border-emerald-500/60 hover:bg-slate-800/80 transition-all text-left group"
                   >
-                    <div className="w-8 h-8 rounded-lg bg-slate-700 flex items-center justify-center flex-shrink-0 group-hover:bg-emerald-500/10 transition-colors">
-                      <Icon className="w-4 h-4 text-slate-400 group-hover:text-emerald-400 transition-colors" />
+                    <div className="w-10 h-10 rounded-lg bg-slate-700 flex items-center justify-center shrink-0 group-hover:bg-emerald-500/10 transition-colors">
+                      <Icon className="w-5 h-5 text-slate-400 group-hover:text-emerald-400 transition-colors" />
                     </div>
                     <div className="min-w-0">
                       <div className="text-sm font-semibold text-slate-200 group-hover:text-slate-100">{cat.label}</div>
@@ -145,7 +145,7 @@ export const PriorityRanking: React.FC = () => {
         <button
           onClick={() => navigate('/preferences')}
           disabled={rankedPriorities.length === 0}
-          className="w-full py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-800 disabled:text-slate-600 text-slate-900 font-semibold transition-colors shadow-lg shadow-emerald-500/20"
+          className="w-full py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-800 disabled:text-slate-600 text-slate-900 font-semibold transition-colors"
         >
           Next: Home Details →
         </button>

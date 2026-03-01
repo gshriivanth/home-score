@@ -67,7 +67,7 @@ export const CityInput: React.FC = () => {
           <button
             onClick={handleContinue}
             disabled={!inputValue.trim()}
-            className="w-full py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-800 disabled:text-slate-600 text-slate-900 font-semibold text-lg transition-colors shadow-lg shadow-emerald-500/20 mb-12"
+            className="w-full py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-800 disabled:text-slate-600 text-slate-900 font-semibold text-lg transition-colors mb-12"
           >
             Get Started →
           </button>

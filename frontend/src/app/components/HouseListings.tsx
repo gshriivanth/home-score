@@ -52,7 +52,7 @@ export const HouseListings: React.FC = () => {
             <button
               key={listing.id}
               onClick={() => handleSelect(listing)}
-              className="bg-slate-800 rounded-2xl overflow-hidden border border-slate-700 hover:border-emerald-500 hover:shadow-lg hover:shadow-emerald-500/10 transition-all text-left group"
+              className="bg-slate-800 rounded-2xl overflow-hidden border border-slate-700 hover:border-emerald-500 transition-all text-left group"
             >
               <div className="aspect-[4/3] overflow-hidden bg-slate-700">
                 <img

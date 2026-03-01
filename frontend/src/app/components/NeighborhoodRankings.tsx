@@ -189,7 +189,7 @@ export const NeighborhoodRankings: React.FC = () => {
                 onMouseLeave={() => setHoveredId(null)}
                 className={`w-full bg-slate-800 rounded-xl p-5 border transition-all text-left ${
                   hoveredId === n.id
-                    ? 'border-emerald-500 shadow-lg shadow-emerald-500/10'
+                    ? 'border-emerald-500'
                     : 'border-slate-700 hover:border-emerald-600'
                 }`}
               >

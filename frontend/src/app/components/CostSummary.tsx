@@ -171,7 +171,7 @@ export const CostSummary: React.FC = () => {
                       <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                       <XAxis dataKey="year" tick={{ fontSize: 12, fill: '#94a3b8' }} stroke="#334155" />
                       <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} stroke="#334155" tickFormatter={(v) => fmt(v as number)} />
-                      <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => fmt(v)} />
+                      <Tooltip contentStyle={tooltipStyle} formatter={(v: number | undefined) => fmt((v ?? 0))} />
                       <Legend wrapperStyle={{ fontSize: 12, color: '#94a3b8' }} />
                       <Area type="monotone" dataKey="Best Case" stroke="#10b981" fill="url(#gradBest)" strokeWidth={2} />
                       <Area type="monotone" dataKey="Expected" stroke="#818cf8" fill="none" strokeWidth={2} strokeDasharray="5 3" />
@@ -190,7 +190,7 @@ export const CostSummary: React.FC = () => {
                       <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                       <XAxis dataKey="year" tick={{ fontSize: 12, fill: '#94a3b8' }} stroke="#334155" />
                       <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} stroke="#334155" tickFormatter={(v) => fmt(v as number)} />
-                      <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => fmt(v)} />
+                      <Tooltip contentStyle={tooltipStyle} formatter={(v: number | undefined) => fmt((v ?? 0))} />
                       <Bar dataKey="Maintenance" fill="#10b981" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
@@ -278,7 +278,7 @@ export const CostSummary: React.FC = () => {
             </button>
             <button
               onClick={() => navigate('/listings')}
-              className="flex-1 py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-900 font-semibold transition-colors shadow-lg shadow-emerald-500/20"
+              className="flex-1 py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-900 font-semibold transition-colors"
             >
               Back to Listings
             </button>

@@ -282,7 +282,7 @@ export const PreferenceIntake: React.FC = () => {
       <div className="mt-8 flex justify-end">
         <button
           onClick={() => navigate('/neighborhoods')}
-          className="px-10 py-3.5 rounded-full bg-emerald-500 hover:bg-emerald-600 text-slate-900 font-semibold text-base transition-colors shadow-lg shadow-emerald-500/20"
+          className="px-10 py-3.5 rounded-full bg-emerald-500 hover:bg-emerald-600 text-slate-900 font-semibold text-base transition-colors"
         >
           Find My Neighborhoods →
         </button>
