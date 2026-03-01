@@ -1,67 +1,42 @@
 /**
- * HomeScore API client
- *
- * Calls POST /rank-neighborhoods on the FastAPI backend and converts
- * the user's ranked priorities into ACS feature weights.
- */
+* HomeScore API client
+*
+* Calls POST /rank-neighborhoods on the FastAPI backend and converts
+* the user's ranked priorities into ACS feature weights.
+*/
+
 
 const BASE_URL: string =
   (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:8000';
 
+
 // ─── Feature metadata ─────────────────────────────────────────────────────────
+
 
 /** Whether a higher raw value is good for this backend feature. */
 const FEATURE_DIRECTION: Record<string, boolean> = {
+  violent_crime_rate: false,  // lower violent crime is better
+  property_crime_rate: false,  // lower property crime is better
+  avg_school_rating: true,   // higher school rating is better
   income: true,   // higher income is better
-  median_rent: false,  // lower rent is better
-  median_home_value: false,  // lower home value is better (affordability)
   commute_time: false,  // lower commute time is better
   pct_bachelors: true,   // higher education share is better
+  racial_diversity_index: true,   // higher diversity is better
+  pct_households_children: true,   // more family households is better
 };
 
-// ─── Priority → feature mapping ───────────────────────────────────────────────
-
-/**
- * Maps each of the 12 frontend priority IDs to one or more backend ACS
- * feature names.  When a priority maps to multiple features, the priority's
- * weight is split equally across them.
- *
- * Priorities that have no direct ACS equivalent are proxied to the closest
- * available signal (documented inline).
- */
-const PRIORITY_FEATURE_MAP: Record<string, string[]> = {
-  safety: ['income'],                       // wealthier ZIPs correlate with lower crime
-  education: ['pct_bachelors'],
-  diversity: ['pct_bachelors'],                // proxy: education diversity
-  commute: ['commute_time'],
-  walkability: ['commute_time'],                 // walkable areas → short commutes
-  transit: ['commute_time'],                 // good transit → short commutes
-  greenspace: ['income'],                       // park infrastructure tracks wealth
-  family: ['pct_bachelors', 'income'],      // split equally
-  nightlife: ['income'],                       // entertainment areas track income
-  dining: ['income'],
-  quiet: ['median_rent'],                  // lower rent → more suburban/quiet
-  community: ['pct_bachelors'],
-};
-violent_crime_rate: false,  // lower violent crime is better
-  property_crime_rate: false,  // lower property crime is better
-    avg_school_rating: true,   // higher school rating is better
-      income: true,   // higher income is better
-        commute_time: false,  // lower commute time is better
-          pct_bachelors: true,   // higher education share is better
-            racial_diversity_index: true,   // higher diversity is better
-              pct_households_children: true,   // more family households is better
-};
 
 /**
- * Predefined weight tiers for rank positions 1–8.
- * Rank 1 (most important) gets the highest weight.
- * When fewer than 8 features are selected, the first k tiers are used
- * and normalised to sum to 1 by the backend.
- */
+* Predefined weight tiers for rank positions 1–8.
+* Rank 1 (most important) gets the highest weight.
+* When fewer than 8 features are selected, the first k tiers are used
+* and normalised to sum to 1 by the backend.
+*/
 const RANK_WEIGHTS = [0.22, 0.18, 0.15, 0.14, 0.12, 0.09, 0.06, 0.04];
 
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
 
 /** Parse "San Francisco, CA" → { city: "San Francisco", state: "CA" }. */
 function parseCityState(input: string): { city: string; state: string } {
@@ -70,19 +45,21 @@ function parseCityState(input: string): { city: string; state: string } {
   return { city: input.trim(), state: 'CA' }; // fallback if no state given
 }
 
+
 interface FeatureWeight {
   name: string;
   weight: number;
   higher_is_better: boolean;
 }
 
+
 /**
- * Convert an ordered list of feature IDs into backend FeatureWeights.
- *
- * Each card ID is already a backend feature name (1:1 mapping).
- * Weights follow predefined tiers so higher-ranked features always
- * carry more weight, even when only a subset is selected.
- */
+* Convert an ordered list of feature IDs into backend FeatureWeights.
+*
+* Each card ID is already a backend feature name (1:1 mapping).
+* Weights follow predefined tiers so higher-ranked features always
+* carry more weight, even when only a subset is selected.
+*/
 function buildFeatureWeights(rankedPriorities: string[]): FeatureWeight[] {
   if (rankedPriorities.length === 0) {
     return Object.entries(FEATURE_DIRECTION).map(([name, hib]) => ({
@@ -92,8 +69,10 @@ function buildFeatureWeights(rankedPriorities: string[]): FeatureWeight[] {
     }));
   }
 
+
   const tiers = RANK_WEIGHTS.slice(0, rankedPriorities.length);
   const total = tiers.reduce((a, b) => a + b, 0);
+
 
   return rankedPriorities.map((featureName, i) => ({
     name: featureName,
@@ -102,7 +81,9 @@ function buildFeatureWeights(rankedPriorities: string[]): FeatureWeight[] {
   }));
 }
 
+
 // ─── Response types ───────────────────────────────────────────────────────────
+
 
 export interface ApiNeighborhood {
   id: string;           // ZIP code
@@ -114,6 +95,7 @@ export interface ApiNeighborhood {
   score: number;        // raw weighted z-score
 }
 
+
 export interface RankNeighborhoodsResponse {
   city: string;
   state: string;
@@ -123,7 +105,9 @@ export interface RankNeighborhoodsResponse {
   warnings: string[];
 }
 
+
 // ─── Main API call ────────────────────────────────────────────────────────────
+
 
 export async function rankNeighborhoods(
   cityInput: string,
@@ -132,19 +116,23 @@ export async function rankNeighborhoods(
   const { city, state } = parseCityState(cityInput);
   const features = buildFeatureWeights(rankedPriorities);
 
+
   const response = await fetch(`${BASE_URL}/rank-neighborhoods`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ city, state, acs_year: 2022, features }),
   });
 
+
   if (!response.ok) {
     const text = await response.text().catch(() => response.statusText);
     throw new Error(`API ${response.status}: ${text}`);
   }
 
+
   return response.json() as Promise<RankNeighborhoodsResponse>;
 }
+
 
 // ─── Gemini listing types ─────────────────────────────────────────────────────
 
