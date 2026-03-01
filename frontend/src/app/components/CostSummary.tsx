@@ -11,8 +11,8 @@ const fmt = (n: number) =>
   n >= 1000000 ? `$${(n / 1000000).toFixed(2)}M` : `$${(n / 1000).toFixed(0)}K`;
 
 const tooltipStyle = {
-  backgroundColor: '#1e293b',
-  border: '1px solid #334155',
+  backgroundColor: '#3A3A3A',
+  border: '1px solid #484848',
   borderRadius: '8px',
   color: '#f1f5f9',
   fontSize: 12,
@@ -53,11 +53,11 @@ export const CostSummary: React.FC = () => {
     costData.monthlyBreakdown.maintenance;
 
   const monthlyItems = [
-    { label: 'Mortgage (30yr, 20% down)', value: costData.monthlyBreakdown.mortgage, color: '#10b981' },
-    { label: 'Property Tax', value: costData.monthlyBreakdown.propertyTax, color: '#059669' },
-    { label: 'Homeowner Insurance', value: costData.monthlyBreakdown.insurance, color: '#34d399' },
-    { label: 'HOA Fees (est.)', value: costData.monthlyBreakdown.hoa, color: '#6ee7b7' },
-    { label: 'Maintenance Reserve', value: costData.monthlyBreakdown.maintenance, color: '#a7f3d0' },
+    { label: 'Mortgage (30yr, 20% down)', value: costData.monthlyBreakdown.mortgage, color: '#1AAFD4' },
+    { label: 'Property Tax', value: costData.monthlyBreakdown.propertyTax, color: '#1788B2' },
+    { label: 'Homeowner Insurance', value: costData.monthlyBreakdown.insurance, color: '#6EC1E4' },
+    { label: 'HOA Fees (est.)', value: costData.monthlyBreakdown.hoa, color: '#2E5F8F' },
+    { label: 'Maintenance Reserve', value: costData.monthlyBreakdown.maintenance, color: '#1F3F63' },
   ];
 
   useEffect(() => {
@@ -86,7 +86,7 @@ export const CostSummary: React.FC = () => {
     <div className="max-w-7xl mx-auto px-6 py-10">
       <button
         onClick={() => navigate('/listings')}
-        className="flex items-center gap-2 text-slate-400 hover:text-emerald-400 transition-colors text-sm font-medium mb-6"
+        className="flex items-center gap-2 text-slate-400 hover:text-[#1AAFD4] transition-colors text-sm font-medium mb-6"
       >
         <ArrowLeft className="w-4 h-4" />
         Back to Listings
@@ -98,19 +98,19 @@ export const CostSummary: React.FC = () => {
           {selectedListing.address}
           <span className="mx-2 text-slate-600">·</span>
           {selectedNeighborhood.name}
-          <span className="ml-2 px-2.5 py-0.5 bg-emerald-500/10 text-emerald-400 text-sm font-semibold rounded-full border border-emerald-800/50">
+          <span className="ml-2 px-2.5 py-0.5 bg-[#1AAFD4]/10 text-[#1AAFD4] text-sm font-semibold rounded-full border border-[#2E5F8F]/50">
             {selectedNeighborhood.matchScore}% match
           </span>
         </p>
       </div>
 
       {/* Price banner */}
-      <div className="bg-emerald-600/20 border border-emerald-700/50 rounded-2xl p-6 mb-8 flex flex-wrap items-center gap-6">
+      <div className="bg-[#1788B2]/20 border border-[#1788B2]/50 rounded-xl p-6 mb-8 flex flex-wrap items-center gap-6">
         <div>
-          <div className="text-emerald-400 text-sm font-medium mb-1">Current Asking Price</div>
+          <div className="text-[#1AAFD4] text-sm font-medium mb-1">Current Asking Price</div>
           <div className="text-5xl font-bold text-slate-100">{fmt(selectedListing.price)}</div>
         </div>
-        <div className="h-12 w-px bg-emerald-800/50 hidden sm:block" />
+        <div className="h-12 w-px bg-[#2E5F8F]/50 hidden sm:block" />
         <div className="flex gap-8 flex-wrap">
           {[
             ['Bedrooms', selectedListing.bedrooms],
@@ -119,7 +119,7 @@ export const CostSummary: React.FC = () => {
             ['Price / sqft', `$${Math.round(selectedListing.price / selectedListing.sqft)}`],
           ].map(([label, val]) => (
             <div key={label}>
-              <div className="text-emerald-600 text-xs mb-1">{label}</div>
+              <div className="text-[#1788B2] text-xs mb-1">{label}</div>
               <div className="font-bold text-lg text-slate-100">{val}</div>
             </div>
           ))}
@@ -129,9 +129,9 @@ export const CostSummary: React.FC = () => {
       <div className="grid lg:grid-cols-2 gap-8">
         {/* Left: charts */}
         <div className="space-y-6">
-          <div className="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden">
+          <div className="bg-[#3A3A3A] rounded-xl border border-[#484848] overflow-hidden">
             {/* Tabs */}
-            <div className="flex border-b border-slate-700">
+            <div className="flex border-b border-[#484848]">
               {([
                 ['future', 'Future Value', TrendingUp],
                 ['maintenance', 'Maintenance', Wrench],
@@ -142,7 +142,7 @@ export const CostSummary: React.FC = () => {
                   onClick={() => setActiveTab(tab)}
                   className={`flex-1 flex items-center justify-center gap-2 py-3.5 text-sm font-medium transition-colors ${
                     activeTab === tab
-                      ? 'text-emerald-400 border-b-2 border-emerald-500 bg-emerald-500/5'
+                      ? 'text-[#1AAFD4] border-b-2 border-[#1AAFD4] bg-[#1AAFD4]/5'
                       : 'text-slate-500 hover:text-slate-300'
                   }`}
                 >
@@ -160,20 +160,20 @@ export const CostSummary: React.FC = () => {
                     <AreaChart data={futurePriceChart}>
                       <defs>
                         <linearGradient id="gradBest" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                          <stop offset="5%" stopColor="#1AAFD4" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#1AAFD4" stopOpacity={0} />
                         </linearGradient>
                         <linearGradient id="gradWorst" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="5%" stopColor="#f87171" stopOpacity={0.2} />
                           <stop offset="95%" stopColor="#f87171" stopOpacity={0} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                      <XAxis dataKey="year" tick={{ fontSize: 12, fill: '#94a3b8' }} stroke="#334155" />
-                      <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} stroke="#334155" tickFormatter={(v) => fmt(v as number)} />
-                      <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => fmt(v)} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="#484848" />
+                      <XAxis dataKey="year" tick={{ fontSize: 12, fill: '#94a3b8' }} stroke="#484848" />
+                      <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} stroke="#484848" tickFormatter={(v) => fmt(v as number)} />
+                      <Tooltip contentStyle={tooltipStyle} formatter={(v: number | undefined) => fmt((v ?? 0))} />
                       <Legend wrapperStyle={{ fontSize: 12, color: '#94a3b8' }} />
-                      <Area type="monotone" dataKey="Best Case" stroke="#10b981" fill="url(#gradBest)" strokeWidth={2} />
+                      <Area type="monotone" dataKey="Best Case" stroke="#1AAFD4" fill="url(#gradBest)" strokeWidth={2} />
                       <Area type="monotone" dataKey="Expected" stroke="#818cf8" fill="none" strokeWidth={2} strokeDasharray="5 3" />
                       <Area type="monotone" dataKey="Worst Case" stroke="#f87171" fill="url(#gradWorst)" strokeWidth={2} />
                     </AreaChart>
@@ -187,14 +187,14 @@ export const CostSummary: React.FC = () => {
                   <h3 className="font-semibold text-slate-100 mb-4">Cumulative Maintenance Costs</h3>
                   <ResponsiveContainer width="100%" height={260}>
                     <BarChart data={maintenanceChart}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                      <XAxis dataKey="year" tick={{ fontSize: 12, fill: '#94a3b8' }} stroke="#334155" />
-                      <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} stroke="#334155" tickFormatter={(v) => fmt(v as number)} />
-                      <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => fmt(v)} />
-                      <Bar dataKey="Maintenance" fill="#10b981" radius={[4, 4, 0, 0]} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="#484848" />
+                      <XAxis dataKey="year" tick={{ fontSize: 12, fill: '#94a3b8' }} stroke="#484848" />
+                      <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} stroke="#484848" tickFormatter={(v) => fmt(v as number)} />
+                      <Tooltip contentStyle={tooltipStyle} formatter={(v: number | undefined) => fmt((v ?? 0))} />
+                      <Bar dataKey="Maintenance" fill="#1AAFD4" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
-                  <div className="mt-4 border-t border-slate-700 pt-4 space-y-2">
+                  <div className="mt-4 border-t border-[#484848] pt-4 space-y-2">
                     <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">10-Year Breakdown</p>
                     {Object.entries(costData.maintenanceCosts[3].breakdown).map(([key, val]) => (
                       <div key={key} className="flex justify-between text-sm">
@@ -202,9 +202,9 @@ export const CostSummary: React.FC = () => {
                         <span className="font-semibold text-slate-200">{fmt(val)}</span>
                       </div>
                     ))}
-                    <div className="flex justify-between text-sm pt-2 border-t border-slate-700 font-bold">
+                    <div className="flex justify-between text-sm pt-2 border-t border-[#484848] font-bold">
                       <span className="text-slate-200">Total (10 years)</span>
-                      <span className="text-emerald-400">{fmt(costData.maintenanceCosts[3].cumulative)}</span>
+                      <span className="text-[#1AAFD4]">{fmt(costData.maintenanceCosts[3].cumulative)}</span>
                     </div>
                   </div>
                 </>
@@ -213,7 +213,7 @@ export const CostSummary: React.FC = () => {
               {activeTab === 'monthly' && (
                 <>
                   <h3 className="font-semibold text-slate-100 mb-1">Monthly Cost Breakdown</h3>
-                  <div className="text-3xl font-bold text-emerald-400 mb-5">
+                  <div className="text-3xl font-bold text-[#1AAFD4] mb-5">
                     ${totalMonthly.toLocaleString()}<span className="text-base text-slate-500 font-normal">/mo</span>
                   </div>
                   <div className="space-y-3">
@@ -223,7 +223,7 @@ export const CostSummary: React.FC = () => {
                           <span className="text-slate-400">{item.label}</span>
                           <span className="font-semibold text-slate-200">${item.value.toLocaleString()}</span>
                         </div>
-                        <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+                        <div className="h-2 bg-[#484848] rounded-full overflow-hidden">
                           <div
                             className="h-full rounded-full"
                             style={{ width: `${(item.value / totalMonthly) * 100}%`, backgroundColor: item.color }}
@@ -248,16 +248,16 @@ export const CostSummary: React.FC = () => {
             { key: 'house' as const, label: 'Home Fit', Icon: TrendingUp, text: streamedText.house, full: summary.houseFit },
             { key: 'costs' as const, label: 'Future Costs', Icon: Wrench, text: streamedText.costs, full: summary.futureCosts },
           ].map(({ key, label, Icon, text, full }) => (
-            <div key={key} className="bg-slate-800 rounded-2xl p-6 border border-slate-700">
+            <div key={key} className="bg-[#3A3A3A] rounded-xl p-6 border border-[#484848]">
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-9 h-9 rounded-xl bg-emerald-500/10 flex items-center justify-center">
-                  <Icon className="w-5 h-5 text-emerald-500" />
+                <div className="w-9 h-9 rounded-lg bg-[#1AAFD4]/10 flex items-center justify-center">
+                  <Icon className="w-5 h-5 text-[#1AAFD4]" />
                 </div>
                 <h3 className="font-semibold text-slate-100">{label}</h3>
                 {isStreaming && text.length === 0 && key === 'neighborhood' && (
                   <div className="ml-auto flex gap-1">
                     {[0, 150, 300].map((delay) => (
-                      <div key={delay} className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: `${delay}ms` }} />
+                      <div key={delay} className="w-1.5 h-1.5 bg-[#1AAFD4] rounded-full animate-bounce" style={{ animationDelay: `${delay}ms` }} />
                     ))}
                   </div>
                 )}
@@ -271,14 +271,14 @@ export const CostSummary: React.FC = () => {
           <div className="flex gap-3">
             <button
               onClick={() => navigate('/')}
-              className="flex-1 py-3.5 rounded-xl border border-emerald-800/50 text-emerald-400 font-semibold hover:bg-emerald-500/10 transition-colors flex items-center justify-center gap-2"
+              className="flex-1 py-3.5 rounded-lg border border-[#2E5F8F]/50 text-[#1AAFD4] font-semibold hover:bg-[#1AAFD4]/10 transition-colors flex items-center justify-center gap-2"
             >
               <RefreshCw className="w-4 h-4" />
               New Search
             </button>
             <button
               onClick={() => navigate('/listings')}
-              className="flex-1 py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-900 font-semibold transition-colors shadow-lg shadow-emerald-500/20"
+              className="flex-1 py-3.5 rounded-lg bg-[#1AAFD4] hover:bg-[#1788B2] text-[#1a1a1a] font-semibold transition-colors"
             >
               Back to Listings
             </button>

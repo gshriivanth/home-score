@@ -76,7 +76,7 @@ export const HouseListings: React.FC = () => {
     <div className="max-w-4xl mx-auto px-6 py-10">
       <button
         onClick={() => navigate('/neighborhoods')}
-        className="flex items-center gap-2 text-slate-400 hover:text-emerald-400 transition-colors text-sm font-medium mb-6"
+        className="flex items-center gap-2 text-slate-400 hover:text-[#1AAFD4] transition-colors text-sm font-medium mb-6"
       >
         <ArrowLeft className="w-4 h-4" />
         Back to Neighborhoods
@@ -90,9 +90,8 @@ export const HouseListings: React.FC = () => {
           </span>
         </div>
         <p className="text-slate-400">
-          Best match found for{' '}
-          <span className="text-emerald-400 font-semibold">{selectedNeighborhood.name}</span>
-          <span className="ml-2 px-2.5 py-0.5 bg-emerald-500/10 text-emerald-400 text-sm font-semibold rounded-full border border-emerald-800/50">
+          <span className="text-[#1AAFD4] font-semibold">{listings.length} listings</span> in {selectedNeighborhood.name}
+          <span className="ml-2 px-2.5 py-0.5 bg-[#1AAFD4]/10 text-[#1AAFD4] text-sm font-semibold rounded-full border border-[#2E5F8F]/50">
             {selectedNeighborhood.matchScore}% match
           </span>
         </p>
@@ -119,72 +118,44 @@ export const HouseListings: React.FC = () => {
             ))}
           </div>
         </div>
-      )}
-
-      {/* Error */}
-      {error && !loading && (
-        <div className="bg-red-500/10 border border-red-800/50 rounded-2xl p-8 flex flex-col items-center text-center gap-4">
-          <AlertCircle className="w-10 h-10 text-red-400" />
-          <div>
-            <h3 className="text-lg font-semibold text-red-300 mb-1">Couldn't find a listing</h3>
-            <p className="text-red-400/80 text-sm font-mono">{error}</p>
-          </div>
+      ) : (
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {listings.map((listing) => (
           <button
-            onClick={fetchListing}
-            className="flex items-center gap-2 px-6 py-2.5 rounded-full bg-red-500/20 hover:bg-red-500/30 text-red-300 font-medium text-sm transition-colors"
+            key={listing.id}
+            onClick={() => handleSelect(listing)}
+            className="bg-[#3A3A3A] rounded-xl overflow-hidden border border-[#484848] hover:border-[#1AAFD4] transition-all text-left group"
           >
-            <RefreshCw className="w-4 h-4" /> Try again
-          </button>
-        </div>
-      )}
-
-      {/* Listing card */}
-      {listing && !loading && !error && (
-        <div className="bg-slate-800 rounded-2xl overflow-hidden border border-slate-700 shadow-xl shadow-black/40">
-
-          {/* Hero image */}
-          <div className="relative aspect-[16/7] overflow-hidden">
-            <img src={listing.imageUrl} alt={listing.address} className="w-full h-full object-cover" />
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-transparent to-transparent" />
-            {listing.daysOnMarket != null && (
-              <div className="absolute bottom-4 left-4 flex items-center gap-1.5 px-3 py-1.5 bg-slate-900/80 backdrop-blur rounded-full text-slate-300 text-xs font-medium">
-                <Clock className="w-3.5 h-3.5 text-yellow-400" />
-                {listing.daysOnMarket} days on market
-              </div>
-            )}
-          </div>
-
-          <div className="p-8">
-            {/* Price + address */}
-            <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
-              <div>
-                <div className="text-4xl font-bold text-emerald-400 mb-1">{fmt(listing.price)}</div>
-                <div className="text-slate-200 text-lg font-medium leading-snug">{listing.address}</div>
-              </div>
-              {listing.propertyType && (
-                <span className="px-3 py-1.5 bg-emerald-500/10 text-emerald-400 text-sm font-semibold rounded-full border border-emerald-800/50">
-                  {listing.propertyType}
-                </span>
-              )}
+            <div className="aspect-[4/3] overflow-hidden bg-[#454545]">
+              <img
+                src={listing.imageUrl}
+                alt={listing.address}
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+              />
             </div>
 
-            {/* Primary spec grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-5">
-              {([
-                { icon: Bed, label: 'Bedrooms', value: String(listing.bedrooms) },
-                { icon: Bath, label: 'Bathrooms', value: String(listing.bathrooms) },
-                { icon: Maximize, label: 'Interior', value: `${listing.sqft.toLocaleString()} sqft` },
-                ...(listing.yearBuilt ? [{ icon: Calendar, label: 'Year Built', value: String(listing.yearBuilt) }] : []),
-                ...(listing.lotSizeSqft ? [{ icon: Home, label: 'Lot Size', value: `${listing.lotSizeSqft.toLocaleString()} sqft` }] : []),
-                ...(listing.pricePerSqft ? [{ icon: DollarSign, label: 'Price/sqft', value: `$${listing.pricePerSqft}` }] : []),
-              ] as { icon: React.ElementType; label: string; value: string }[]).map(({ icon: Icon, label, value }) => (
-                <div key={label} className="bg-slate-700/50 rounded-xl p-4 border border-slate-700">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Icon className="w-4 h-4 text-emerald-500" />
-                    <span className="text-slate-400 text-xs font-medium uppercase tracking-wide">{label}</span>
-                  </div>
-                  <div className="text-slate-100 font-bold text-lg">{value}</div>
+            <div className="p-5">
+              <div className="text-2xl font-bold text-[#1AAFD4] mb-1">
+                ${listing.price >= 1000000
+                  ? `${(listing.price / 1000000).toFixed(2)}M`
+                  : `${(listing.price / 1000).toFixed(0)}K`}
+              </div>
+              <div className="text-slate-200 font-medium mb-4 leading-snug">{listing.address}</div>
+              <div className="flex gap-4 text-slate-400 text-sm border-t border-[#484848] pt-3">
+                <div className="flex items-center gap-1.5">
+                  <Bed className="w-4 h-4 text-slate-500" />
+                  <span>{listing.bedrooms} bed</span>
                 </div>
+                <div className="flex items-center gap-1.5">
+                  <Bath className="w-4 h-4 text-slate-500" />
+                  <span>{listing.bathrooms} bath</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Maximize className="w-4 h-4 text-slate-500" />
+                  <span>{listing.sqft.toLocaleString()} sqft</span>
+                </div>
+                <div className="text-slate-100 font-bold text-lg">{value}</div>
+              </div>
               ))}
             </div>
 
