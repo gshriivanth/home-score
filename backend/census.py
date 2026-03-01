@@ -157,9 +157,9 @@ async def fetch_acs_data(
 
     Parameters
     ----------
-    zctas        : ZCTA codes to include; empty list means "all in state"
+    zctas        : ZCTA codes to include; empty list means "all ZCTAs nationally"
     feature_names: Which derived features to compute
-    state_fips   : 2-digit Census state FIPS
+    state_fips   : 2-digit Census state FIPS (kept for signature compatibility)
     year         : ACS 5-year vintage (e.g. 2022)
     api_key      : Census API key (can be empty string for low-rate testing)
 
@@ -178,7 +178,8 @@ async def fetch_acs_data(
         return {}
 
     var_str = ",".join(vars_needed)
-    cache_key = f"acs|{year}|{state_fips}|{var_str}"
+    # Cache key is national (ZCTAs don't nest under states in the Census API)
+    cache_key = f"acs|{year}|{var_str}"
 
     raw_rows = _cache_get(cache_key)
 
@@ -187,7 +188,9 @@ async def fetch_acs_data(
         params: Dict[str, str] = {
             "get": f"NAME,{var_str}",
             "for": "zip code tabulation area:*",
-            "in": f"state:{state_fips}",
+            # NOTE: ZCTAs are a national geography — Census API does not support
+            # filtering by state with 'in=state:XX' for this geography level.
+            # We filter to the requested ZCTAs client-side below.
         }
         if api_key:
             params["key"] = api_key
