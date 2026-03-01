@@ -1,27 +1,79 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { usePreferences } from '../context/PreferencesContext';
-import { mockListings } from '../data/mockData';
-import { Bed, Bath, Maximize, ArrowLeft } from 'lucide-react';
+import { getListing, type GeminiListing } from '../api';
+import {
+  Bed, Bath, Maximize, ArrowLeft, Loader2,
+  AlertCircle, Calendar, Car, Waves, Home, Clock, DollarSign, RefreshCw, User,
+} from 'lucide-react';
+
+function parseCityState(input: string): { city: string; state: string } {
+  const match = input.trim().match(/^(.+),\s*([A-Za-z]{2})$/);
+  if (match) return { city: match[1].trim(), state: match[2].toUpperCase() };
+  return { city: input.trim(), state: 'CA' };
+}
+
+const fmt = (n: number) =>
+  n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(2)}M` : `$${(n / 1_000).toFixed(0)}K`;
 
 export const HouseListings: React.FC = () => {
   const navigate = useNavigate();
-  const { selectedNeighborhood, setSelectedListing } = usePreferences();
+  const { selectedNeighborhood, setSelectedListing, houseRequirements, city } = usePreferences();
+
+  const [listing, setListing] = useState<GeminiListing | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   if (!selectedNeighborhood) {
     navigate('/neighborhoods');
     return null;
   }
 
-  const listings = mockListings.filter((l) => l.neighborhoodId === selectedNeighborhood.id);
+  const { city: parsedCity, state } = parseCityState(city);
 
-  const handleSelect = (listing: (typeof mockListings)[0]) => {
-    setSelectedListing(listing);
+  const fetchListing = () => {
+    setLoading(true);
+    setError(null);
+    setListing(null);
+
+    getListing(
+      selectedNeighborhood.id,
+      parsedCity,
+      state,
+      houseRequirements.bedrooms,
+      houseRequirements.bathrooms,
+      houseRequirements.minPrice,
+      houseRequirements.maxPrice,
+      houseRequirements.sqftMin,
+      houseRequirements.sqftMax,
+      houseRequirements.propertyType,
+      houseRequirements.garage,
+      houseRequirements.pool,
+      houseRequirements.yearBuilt,
+    )
+      .then((data) => { setListing(data); setLoading(false); })
+      .catch((err: Error) => { setError(err.message); setLoading(false); });
+  };
+
+  useEffect(() => { fetchListing(); }, [selectedNeighborhood.id]);
+
+  const handleSelect = () => {
+    if (!listing) return;
+    setSelectedListing({
+      id: listing.id,
+      neighborhoodId: listing.neighborhoodId,
+      address: listing.address,
+      price: listing.price,
+      bedrooms: listing.bedrooms,
+      bathrooms: listing.bathrooms,
+      sqft: listing.sqft,
+      imageUrl: listing.imageUrl,
+    });
     navigate('/summary');
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-10">
+    <div className="max-w-4xl mx-auto px-6 py-10">
       <button
         onClick={() => navigate('/neighborhoods')}
         className="flex items-center gap-2 text-slate-400 hover:text-emerald-400 transition-colors text-sm font-medium mb-6"
@@ -31,61 +83,174 @@ export const HouseListings: React.FC = () => {
       </button>
 
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-100 mb-1">Available Homes</h1>
+        <div className="flex items-center gap-3 mb-1">
+          <h1 className="text-3xl font-bold text-slate-100">Live Zillow Listing</h1>
+          <span className="px-2.5 py-1 bg-blue-500/10 text-blue-400 text-xs font-bold rounded-full border border-blue-800/40 uppercase tracking-wide">
+            Real Data
+          </span>
+        </div>
         <p className="text-slate-400">
-          <span className="text-emerald-400 font-semibold">{listings.length} listings</span> in {selectedNeighborhood.name}
+          Best match found for{' '}
+          <span className="text-emerald-400 font-semibold">{selectedNeighborhood.name}</span>
           <span className="ml-2 px-2.5 py-0.5 bg-emerald-500/10 text-emerald-400 text-sm font-semibold rounded-full border border-emerald-800/50">
             {selectedNeighborhood.matchScore}% match
           </span>
         </p>
       </div>
 
-      {listings.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-24 text-center">
-          <div className="text-5xl mb-4">🏠</div>
-          <h3 className="text-xl font-semibold text-slate-300 mb-2">No listings yet</h3>
-          <p className="text-slate-500">Listings for this neighborhood will appear here once connected to live data.</p>
+      {/* Loading */}
+      {loading && (
+        <div className="flex flex-col items-center justify-center py-32 text-center">
+          <div className="relative mb-6">
+            <div className="w-20 h-20 rounded-2xl bg-emerald-500/10 flex items-center justify-center">
+              <Loader2 className="w-10 h-10 text-emerald-400 animate-spin" />
+            </div>
+            <div className="absolute -top-1 -right-1 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+              <span className="text-white text-xs font-bold">Z</span>
+            </div>
+          </div>
+          <h3 className="text-xl font-semibold text-slate-200 mb-2">Searching Zillow…</h3>
+          <p className="text-slate-500 text-sm max-w-sm">
+            Gemini is scanning active listings in ZIP <span className="text-emerald-400 font-mono">{selectedNeighborhood.id}</span> that match your {houseRequirements.bedrooms}bd / {houseRequirements.bathrooms}ba requirements.
+          </p>
+          <div className="mt-6 flex gap-2">
+            {[0, 200, 400].map((d) => (
+              <div key={d} className="w-2 h-2 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: `${d}ms` }} />
+            ))}
+          </div>
         </div>
-      ) : (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {listings.map((listing) => (
-            <button
-              key={listing.id}
-              onClick={() => handleSelect(listing)}
-              className="bg-slate-800 rounded-2xl overflow-hidden border border-slate-700 hover:border-emerald-500 hover:shadow-lg hover:shadow-emerald-500/10 transition-all text-left group"
-            >
-              <div className="aspect-[4/3] overflow-hidden bg-slate-700">
-                <img
-                  src={listing.imageUrl}
-                  alt={listing.address}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                />
-              </div>
+      )}
 
-              <div className="p-5">
-                <div className="text-2xl font-bold text-emerald-400 mb-1">
-                  ${listing.price >= 1000000
-                    ? `${(listing.price / 1000000).toFixed(2)}M`
-                    : `${(listing.price / 1000).toFixed(0)}K`}
-                </div>
-                <div className="text-slate-200 font-medium mb-4 leading-snug">{listing.address}</div>
-                <div className="flex gap-4 text-slate-400 text-sm border-t border-slate-700 pt-3">
-                  <div className="flex items-center gap-1.5">
-                    <Bed className="w-4 h-4 text-slate-500" />
-                    <span>{listing.bedrooms} bed</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <Bath className="w-4 h-4 text-slate-500" />
-                    <span>{listing.bathrooms} bath</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <Maximize className="w-4 h-4 text-slate-500" />
-                    <span>{listing.sqft.toLocaleString()} sqft</span>
-                  </div>
-                </div>
+      {/* Error */}
+      {error && !loading && (
+        <div className="bg-red-500/10 border border-red-800/50 rounded-2xl p-8 flex flex-col items-center text-center gap-4">
+          <AlertCircle className="w-10 h-10 text-red-400" />
+          <div>
+            <h3 className="text-lg font-semibold text-red-300 mb-1">Couldn't find a listing</h3>
+            <p className="text-red-400/80 text-sm font-mono">{error}</p>
+          </div>
+          <button
+            onClick={fetchListing}
+            className="flex items-center gap-2 px-6 py-2.5 rounded-full bg-red-500/20 hover:bg-red-500/30 text-red-300 font-medium text-sm transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" /> Try again
+          </button>
+        </div>
+      )}
+
+      {/* Listing card */}
+      {listing && !loading && !error && (
+        <div className="bg-slate-800 rounded-2xl overflow-hidden border border-slate-700 shadow-xl shadow-black/40">
+
+          {/* Hero image */}
+          <div className="relative aspect-[16/7] overflow-hidden">
+            <img src={listing.imageUrl} alt={listing.address} className="w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-transparent to-transparent" />
+            {listing.daysOnMarket != null && (
+              <div className="absolute bottom-4 left-4 flex items-center gap-1.5 px-3 py-1.5 bg-slate-900/80 backdrop-blur rounded-full text-slate-300 text-xs font-medium">
+                <Clock className="w-3.5 h-3.5 text-yellow-400" />
+                {listing.daysOnMarket} days on market
               </div>
-            </button>
-          ))}
+            )}
+          </div>
+
+          <div className="p-8">
+            {/* Price + address */}
+            <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
+              <div>
+                <div className="text-4xl font-bold text-emerald-400 mb-1">{fmt(listing.price)}</div>
+                <div className="text-slate-200 text-lg font-medium leading-snug">{listing.address}</div>
+              </div>
+              {listing.propertyType && (
+                <span className="px-3 py-1.5 bg-emerald-500/10 text-emerald-400 text-sm font-semibold rounded-full border border-emerald-800/50">
+                  {listing.propertyType}
+                </span>
+              )}
+            </div>
+
+            {/* Primary spec grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-5">
+              {([
+                { icon: Bed, label: 'Bedrooms', value: String(listing.bedrooms) },
+                { icon: Bath, label: 'Bathrooms', value: String(listing.bathrooms) },
+                { icon: Maximize, label: 'Interior', value: `${listing.sqft.toLocaleString()} sqft` },
+                ...(listing.yearBuilt ? [{ icon: Calendar, label: 'Year Built', value: String(listing.yearBuilt) }] : []),
+                ...(listing.lotSizeSqft ? [{ icon: Home, label: 'Lot Size', value: `${listing.lotSizeSqft.toLocaleString()} sqft` }] : []),
+                ...(listing.pricePerSqft ? [{ icon: DollarSign, label: 'Price/sqft', value: `$${listing.pricePerSqft}` }] : []),
+              ] as { icon: React.ElementType; label: string; value: string }[]).map(({ icon: Icon, label, value }) => (
+                <div key={label} className="bg-slate-700/50 rounded-xl p-4 border border-slate-700">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Icon className="w-4 h-4 text-emerald-500" />
+                    <span className="text-slate-400 text-xs font-medium uppercase tracking-wide">{label}</span>
+                  </div>
+                  <div className="text-slate-100 font-bold text-lg">{value}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Secondary info row */}
+            <div className="flex flex-wrap gap-2 mb-5">
+              {listing.garage && (
+                <span className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 rounded-full text-slate-300 text-sm">
+                  <Car className="w-3.5 h-3.5 text-slate-400" /> Garage
+                </span>
+              )}
+              {listing.pool && (
+                <span className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 rounded-full text-slate-300 text-sm">
+                  <Waves className="w-3.5 h-3.5 text-slate-400" /> Pool
+                </span>
+              )}
+              {listing.hoaMonthly != null && (
+                <span className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 rounded-full text-slate-300 text-sm">
+                  <DollarSign className="w-3.5 h-3.5 text-slate-400" /> HOA ${listing.hoaMonthly}/mo
+                </span>
+              )}
+              {listing.stories != null && (
+                <span className="px-3 py-1.5 bg-slate-700 rounded-full text-slate-300 text-sm">
+                  {listing.stories} {listing.stories === 1 ? 'story' : 'stories'}
+                </span>
+              )}
+              <span className="px-3 py-1.5 bg-slate-700 rounded-full text-slate-400 text-sm font-mono">
+                ZIP {selectedNeighborhood.id}
+              </span>
+            </div>
+
+            {/* Listing description */}
+            {listing.description && (
+              <div className="bg-slate-700/40 border border-slate-600/50 rounded-xl p-5 mb-5">
+                <p className="text-slate-300 text-sm leading-relaxed italic">"{listing.description}"</p>
+              </div>
+            )}
+
+            {/* Agent info */}
+            {(listing.agentName || listing.brokerageName) && (
+              <div className="flex items-center gap-2 mb-6 text-slate-500 text-sm">
+                <User className="w-4 h-4" />
+                <span>
+                  Listed by {listing.agentName ?? 'Agent'}
+                  {listing.brokerageName ? ` · ${listing.brokerageName}` : ''}
+                </span>
+              </div>
+            )}
+
+            {/* CTA buttons */}
+            <div className="flex gap-3 flex-wrap">
+              <button
+                onClick={handleSelect}
+                className="flex-1 py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-900 font-bold transition-colors shadow-lg shadow-emerald-500/20"
+              >
+                Select This Home →
+              </button>
+
+              <button
+                onClick={fetchListing}
+                title="Find a different listing"
+                className="p-3.5 rounded-xl border border-slate-600 hover:border-slate-500 text-slate-400 hover:text-slate-200 transition-colors"
+              >
+                <RefreshCw className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

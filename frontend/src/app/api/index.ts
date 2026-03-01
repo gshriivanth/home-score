@@ -12,11 +12,11 @@ const BASE_URL: string =
 
 /** Whether a higher raw value is good for this ACS feature. */
 const FEATURE_DIRECTION: Record<string, boolean> = {
-  income:            true,   // higher income is better
-  median_rent:       false,  // lower rent is better
+  income: true,   // higher income is better
+  median_rent: false,  // lower rent is better
   median_home_value: false,  // lower home value is better (affordability)
-  commute_time:      false,  // lower commute time is better
-  pct_bachelors:     true,   // higher education share is better
+  commute_time: false,  // lower commute time is better
+  pct_bachelors: true,   // higher education share is better
 };
 
 // ─── Priority → feature mapping ───────────────────────────────────────────────
@@ -30,18 +30,18 @@ const FEATURE_DIRECTION: Record<string, boolean> = {
  * available signal (documented inline).
  */
 const PRIORITY_FEATURE_MAP: Record<string, string[]> = {
-  safety:      ['income'],                       // wealthier ZIPs correlate with lower crime
-  education:   ['pct_bachelors'],
-  diversity:   ['pct_bachelors'],                // proxy: education diversity
-  commute:     ['commute_time'],
+  safety: ['income'],                       // wealthier ZIPs correlate with lower crime
+  education: ['pct_bachelors'],
+  diversity: ['pct_bachelors'],                // proxy: education diversity
+  commute: ['commute_time'],
   walkability: ['commute_time'],                 // walkable areas → short commutes
-  transit:     ['commute_time'],                 // good transit → short commutes
-  greenspace:  ['income'],                       // park infrastructure tracks wealth
-  family:      ['pct_bachelors', 'income'],      // split equally
-  nightlife:   ['income'],                       // entertainment areas track income
-  dining:      ['income'],
-  quiet:       ['median_rent'],                  // lower rent → more suburban/quiet
-  community:   ['pct_bachelors'],
+  transit: ['commute_time'],                 // good transit → short commutes
+  greenspace: ['income'],                       // park infrastructure tracks wealth
+  family: ['pct_bachelors', 'income'],      // split equally
+  nightlife: ['income'],                       // entertainment areas track income
+  dining: ['income'],
+  quiet: ['median_rent'],                  // lower rent → more suburban/quiet
+  community: ['pct_bachelors'],
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -140,4 +140,74 @@ export async function rankNeighborhoods(
   }
 
   return response.json() as Promise<RankNeighborhoodsResponse>;
+}
+
+// ─── Gemini listing types ─────────────────────────────────────────────────────
+
+export interface GeminiListing {
+  id: string;
+  neighborhoodId: string;
+  address: string;
+  price: number;
+  bedrooms: number;
+  bathrooms: number;
+  sqft: number;
+  yearBuilt?: number;
+  lotSizeSqft?: number;
+  propertyType?: string;
+  garage: boolean;
+  pool: boolean;
+  stories?: number;
+  daysOnMarket?: number;
+  hoaMonthly?: number;
+  pricePerSqft?: number;
+  description: string;
+  zillowUrl: string;
+  imageUrl: string;
+  agentName?: string;
+  brokerageName?: string;
+  source?: string;
+}
+
+export async function getListing(
+  zipCode: string,
+  city: string,
+  state: string,
+  bedrooms: number,
+  bathrooms: number,
+  minPrice: number,
+  maxPrice: number,
+  sqftMin: number,
+  sqftMax: number,
+  propertyType: string,
+  garage: boolean,
+  pool: boolean,
+  yearBuilt: string,
+): Promise<GeminiListing> {
+  const response = await fetch(`${BASE_URL}/listings`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      zip_code: zipCode,
+      city,
+      state,
+      bedrooms,
+      bathrooms,
+      min_price: minPrice,
+      max_price: maxPrice,
+      sqft_min: sqftMin,
+      sqft_max: sqftMax,
+      property_type: propertyType,
+      garage,
+      pool,
+      year_built: yearBuilt,
+    }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => response.statusText);
+    throw new Error(`Listings API ${response.status}: ${text}`);
+  }
+
+  return response.json() as Promise<GeminiListing>;
 }

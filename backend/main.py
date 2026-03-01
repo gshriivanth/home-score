@@ -31,7 +31,11 @@ import asyncio
 import os
 from typing import Dict, List
 
+from pydantic import BaseModel
+
 from dotenv import load_dotenv
+load_dotenv()  # MUST be before any local imports that read os.getenv() at module level
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -40,6 +44,7 @@ from census import STATE_FIPS, fetch_acs_data
 from fbi import SUPPORTED_FEATURES as _CRIME_FEATURES
 from fbi import fetch_crime_data
 from geo import lookup_zips_for_city
+from listings import generate_listings
 from models import (
     FeatureBreakdown,
     NeighborhoodLocation,
@@ -53,11 +58,11 @@ from schools import SUPPORTED_FEATURES as _SCHOOL_FEATURES
 from schools import fetch_school_data
 from scoring import rank_zips
 
-load_dotenv()
 
 CENSUS_API_KEY: str = os.getenv("CENSUS_API_KEY", "")
 FBI_API_KEY: str = os.getenv("FBI_API_KEY", "")
 GREATSCHOOLS_API_KEY: str = os.getenv("GREATSCHOOLS_API_KEY", "")
+GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
 
 # Combined set of all features supported across all three data sources
 ALL_SUPPORTED_FEATURES = _ACS_FEATURES | _CRIME_FEATURES | _SCHOOL_FEATURES
@@ -364,10 +369,66 @@ async def rank_neighborhoods_endpoint(req: RankZipsRequest) -> RankNeighborhoods
 
 
 # ---------------------------------------------------------------------------
+# POST /listings  (Gemini-powered Zillow-style listing generator)
+# ---------------------------------------------------------------------------
+
+class ListingRequest(BaseModel):
+    zip_code: str
+    city: str
+    state: str
+    bedrooms: int = 3
+    bathrooms: float = 2.0
+    min_price: int = 400_000
+    max_price: int = 800_000
+    sqft_min: int = 1_000
+    sqft_max: int = 3_000
+    property_type: str = "any"
+    garage: bool = False
+    pool: bool = False
+    year_built: str = "any"
+
+
+@app.post("/listings", tags=["listings"])
+async def get_listing(req: ListingRequest) -> Dict:
+    """
+    Generate a single realistic home listing for the given ZIP code using
+    the Gemini + Redfin scraping pipeline. Gemini finds an active listing URL
+    via Google Search, then the page is scraped for property details.
+    """
+    gemini_key = os.getenv("GEMINI_API_KEY", "")
+    if not gemini_key:
+        raise HTTPException(
+            status_code=503,
+            detail="GEMINI_API_KEY not configured on the server. Add it to backend/.env.",
+        )
+    try:
+        listings = await generate_listings(
+            zip_code=req.zip_code,
+            city=req.city,
+            state=req.state,
+            bedrooms=req.bedrooms,
+            bathrooms=req.bathrooms,
+            min_price=req.min_price,
+            max_price=req.max_price,
+            sqft_min=req.sqft_min,
+            sqft_max=req.sqft_max,
+            property_type=req.property_type,
+            garage=req.garage,
+            pool=req.pool,
+            year_built=req.year_built,
+        )
+        return listings[0] if listings else {}
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Listings error: {exc}")
+
+
+# ---------------------------------------------------------------------------
 # Dev entrypoint
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True, reload_excludes=[".venv"])
