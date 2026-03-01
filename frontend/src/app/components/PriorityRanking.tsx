@@ -2,8 +2,8 @@ import React from 'react';
 import { useNavigate } from 'react-router';
 import { usePreferences } from '../context/PreferencesContext';
 import {
-  ArrowLeft, X, Shield, GraduationCap, Globe, Car,
-  PersonStanding, Bus, Leaf, Baby, Moon, UtensilsCrossed, Wind, Users,
+  ArrowLeft, X, Shield, Lock, GraduationCap, BookOpen,
+  TrendingUp, Car, Globe, Baby,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -15,18 +15,14 @@ interface Category {
 }
 
 const ALL_CATEGORIES: Category[] = [
-  { id: 'safety',      label: 'Safety',          desc: 'Crime rates & security',       Icon: Shield },
-  { id: 'education',   label: 'Education',        desc: 'School quality & ratings',     Icon: GraduationCap },
-  { id: 'diversity',   label: 'Diversity',        desc: 'Cultural & demographic mix',   Icon: Globe },
-  { id: 'commute',     label: 'Commute',          desc: 'Travel time & traffic',        Icon: Car },
-  { id: 'walkability', label: 'Walkability',      desc: 'Walk score & daily errands',   Icon: PersonStanding },
-  { id: 'transit',     label: 'Public Transit',   desc: 'Bus, metro & rail access',     Icon: Bus },
-  { id: 'greenspace',  label: 'Green Space',      desc: 'Parks & outdoor areas',        Icon: Leaf },
-  { id: 'family',      label: 'Family Friendly',  desc: 'Kid-safe activities',          Icon: Baby },
-  { id: 'nightlife',   label: 'Nightlife',        desc: 'Entertainment & bars',         Icon: Moon },
-  { id: 'dining',      label: 'Dining & Shops',   desc: 'Restaurants & retail',         Icon: UtensilsCrossed },
-  { id: 'quiet',       label: 'Quiet & Peaceful', desc: 'Low noise & calm streets',     Icon: Wind },
-  { id: 'community',   label: 'Community',        desc: 'Events & neighborhood vibe',   Icon: Users },
+  { id: 'violent_crime_rate',      label: 'Safety',              desc: 'Violent crime rates',                 Icon: Shield },
+  { id: 'property_crime_rate',     label: 'Property Security',   desc: 'Theft & property crime',              Icon: Lock },
+  { id: 'avg_school_rating',       label: 'Schools',             desc: 'School quality & ratings',            Icon: GraduationCap },
+  { id: 'income',                  label: 'Neighborhood Wealth', desc: 'Median household income',             Icon: TrendingUp },
+  { id: 'commute_time',            label: 'Commute',             desc: 'Travel time to work',                 Icon: Car },
+  { id: 'pct_bachelors',           label: 'Education Level',     desc: 'Share of college-educated residents', Icon: BookOpen },
+  { id: 'racial_diversity_index',  label: 'Diversity',           desc: 'Cultural & demographic mix',          Icon: Globe },
+  { id: 'pct_households_children', label: 'Family Friendly',     desc: 'Households with children',            Icon: Baby },
 ];
 
 export const PriorityRanking: React.FC = () => {
