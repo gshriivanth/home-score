@@ -527,23 +527,34 @@ async def predict_appreciation(req: AppreciationPredictionRequest) -> Appreciati
             warnings.append(f"FRED API error: {e} — using training median macro values.")
             macros = {}
 
+    # Fetch ACS features for the ZIP (v2 model uses these instead of property-level features)
+    acs_zip_features: Dict = {}
+    try:
+        state_upper = req.state.upper().strip()
+        zip_state_fips = STATE_FIPS.get(state_upper, "")
+        if zip_state_fips and req.zip:
+            acs_result = await fetch_acs_data(
+                zctas=[req.zip],
+                feature_names=["income", "commute_time", "pct_bachelors", "racial_diversity_index"],
+                state_fips=zip_state_fips,
+                year=2022,
+                api_key=CENSUS_API_KEY,
+            )
+            acs_zip_features = acs_result.get(req.zip, {})
+    except Exception as acs_err:
+        warnings.append(f"ACS lookup for ZIP {req.zip} failed: {acs_err} — using training median features.")
+
     # Build listing dict from request
     listing = {
         "price": req.price,
-        "sqft": req.sqft,
-        "bedrooms": req.bedrooms,
-        "bathrooms": req.bathrooms,
-        "yearBuilt": req.yearBuilt,
-        "propertyType": req.propertyType,
         "zip": req.zip,
         "state": req.state,
-        "garage": req.garage,
-        "pool": req.pool,
-        "latitude": req.latitude,
-        "longitude": req.longitude,
-        "lot_size_sqft": req.lot_size_sqft,
-        "stories": req.stories,
         "county": req.county,
+        # ACS features used by v2 model
+        "income":                 acs_zip_features.get("income"),
+        "commute_time":           acs_zip_features.get("commute_time"),
+        "pct_bachelors":          acs_zip_features.get("pct_bachelors"),
+        "racial_diversity_index": acs_zip_features.get("racial_diversity_index"),
     }
 
     # Run predictions
