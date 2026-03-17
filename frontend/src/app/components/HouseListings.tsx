@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { usePreferences } from '../context/PreferencesContext';
-import { getListings, predictAppreciation, type GeminiListing, type AppreciationPredictionResponse } from '../api';
+import { getListings, predictAppreciation, type GeminiListing, type AppreciationPredictionResponse, type ListingsResponse } from '../api';
 import { AppreciationChart } from './AppreciationChart';
 import {
   Bed, Bath, Maximize, ArrowLeft, Loader2,
@@ -36,6 +36,8 @@ export const HouseListings: React.FC = () => {
   const [selectedDetail, setSelectedDetail] = useState<GeminiListing | null>(null);
   const [localAppreciationData, setLocalAppreciationData] = useState<AppreciationPredictionResponse | null>(null);
   const [appreciationLoading, setAppreciationLoading] = useState(false);
+  const [seenIds, setSeenIds] = useState<string[]>([]);
+  const [exhausted, setExhausted] = useState(false);
 
 
   if (!selectedNeighborhood) {
@@ -47,7 +49,7 @@ export const HouseListings: React.FC = () => {
   const { city: parsedCity, state } = parseCityState(city);
 
 
-  const fetchListings = () => {
+  const fetchListings = (currentSeenIds: string[]) => {
     setLoading(true);
     setError(null);
     setListings([]);
@@ -70,16 +72,25 @@ export const HouseListings: React.FC = () => {
       houseRequirements.garage,
       houseRequirements.pool,
       houseRequirements.yearBuilt,
+      currentSeenIds,
     )
-      .then((data: GeminiListing[]) => {
+      .then(({ listings: data, exhausted: ex }: ListingsResponse) => {
         setListings(data);
+        if (data.length > 0) {
+          setSeenIds(prev => [...new Set([...prev, ...data.map(l => l.id)])]);
+        }
+        setExhausted(ex);
         setLoading(false);
       })
       .catch((err: Error) => { setError(err.message); setLoading(false); });
   };
 
 
-  useEffect(() => { fetchListings(); }, [selectedNeighborhood.id]);
+  useEffect(() => {
+    setSeenIds([]);
+    setExhausted(false);
+    fetchListings([]);
+  }, [selectedNeighborhood.id]);
 
 
   // Open the detail view for a listing and fetch appreciation data
@@ -362,10 +373,32 @@ export const HouseListings: React.FC = () => {
             <p className="text-red-400/80 text-sm font-mono">{error}</p>
           </div>
           <button
-            onClick={fetchListings}
+            onClick={() => fetchListings(seenIds)}
             className="flex items-center gap-2 px-6 py-2.5 rounded-full bg-red-500/20 hover:bg-red-500/30 text-red-300 font-medium text-sm transition-colors"
           >
             <RefreshCw className="w-4 h-4" /> Try again
+          </button>
+        </div>
+      )}
+
+      {/* Exhausted — no more unseen listings */}
+      {exhausted && listings.length === 0 && !loading && !error && (
+        <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-10 flex flex-col items-center text-center gap-4">
+          <div className="w-14 h-14 rounded-2xl bg-slate-700 flex items-center justify-center mb-1">
+            <Home className="w-7 h-7 text-slate-400" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-slate-200 mb-1">No more unseen listings</h3>
+            <p className="text-slate-500 text-sm max-w-sm">
+              You've seen all available listings matching your preferences in ZIP{' '}
+              <span className="text-[#1AAFD4] font-mono">{selectedNeighborhood.id}</span>.
+            </p>
+          </div>
+          <button
+            onClick={() => { setSeenIds([]); setExhausted(false); fetchListings([]); }}
+            className="flex items-center gap-2 px-6 py-2.5 rounded-full bg-[#1AAFD4]/10 hover:bg-[#1AAFD4]/20 text-[#1AAFD4] font-medium text-sm transition-colors border border-[#1AAFD4]/30"
+          >
+            <RefreshCw className="w-4 h-4" /> See all listings again
           </button>
         </div>
       )}
@@ -377,14 +410,17 @@ export const HouseListings: React.FC = () => {
           <div className="flex items-center justify-between mb-6">
             <p className="text-slate-400 text-sm">
               <span className="text-[#1AAFD4] font-semibold">{listings.length} listing{listings.length !== 1 ? 's' : ''}</span> found
+              {exhausted && <span className="ml-2 text-slate-500 text-xs">(last batch)</span>}
             </p>
-            <button
-              onClick={fetchListings}
-              title="Refresh listings"
-              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-600 hover:border-slate-500 text-slate-400 hover:text-slate-200 transition-colors text-sm"
-            >
-              <RefreshCw className="w-4 h-4" /> Refresh
-            </button>
+            {!exhausted && (
+              <button
+                onClick={() => fetchListings(seenIds)}
+                title="Show different listings"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-600 hover:border-slate-500 text-slate-400 hover:text-slate-200 transition-colors text-sm"
+              >
+                <RefreshCw className="w-4 h-4" /> Show more
+              </button>
+            )}
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">

@@ -29,7 +29,7 @@ NCES_BASE = "https://educationdata.urban.org/api/v1"
 _ASSESSMENT_YEARS = [2022, 2021, 2019]
 _SUBJECTS = ["mth", "rla"]  # math and reading/language arts
 CACHE_TTL_SECONDS = 24 * 3600  # NCES data is static — cache for 24h
-_MAX_CONCURRENT = 8  # Urban Institute allows reasonable concurrency
+_MAX_CONCURRENT = 20  # Urban Institute API is permissive; 20 concurrent is safe
 
 SUPPORTED_FEATURES = {"avg_proficiency_rate"}
 
@@ -58,33 +58,33 @@ async def _fetch_proficiency_for_zip(
 ) -> Optional[float]:
     """
     Fetch avg math + reading proficiency for one ZIP from EdFacts.
-    Returns a float 0–100, or None if no data is available.
+    Both subjects are fetched in parallel. Returns a float 0–100, or None.
     """
-    all_pct: List[float] = []
-
-    for subject in _SUBJECTS:
+    async def _fetch_subject(subject: str) -> List[float]:
         url = f"{NCES_BASE}/schools/edfacts/assessments/{year}/grades/99/subjects/{subject}/"
-        params: Dict[str, object] = {
-            "zip_mailing": zcta,
-            "per_page": 100,
-        }
+        params: Dict[str, object] = {"zip_mailing": zcta, "per_page": 100}
         try:
             resp = await client.get(url, params=params)
             if resp.status_code != 200:
-                continue
+                return []
             body = resp.json()
         except (httpx.HTTPError, Exception):
-            continue
-
+            return []
+        pcts: List[float] = []
         for school in body.get("results", []):
             val = school.get("pct_prof_midpt")
             if val is not None:
                 try:
                     f = float(val)
                     if 0.0 <= f <= 100.0:
-                        all_pct.append(f)
+                        pcts.append(f)
                 except (TypeError, ValueError):
                     pass
+        return pcts
+
+    # Fetch math and reading in parallel
+    subject_results = await asyncio.gather(*[_fetch_subject(s) for s in _SUBJECTS])
+    all_pct: List[float] = [v for lst in subject_results for v in lst]
 
     if not all_pct:
         return None

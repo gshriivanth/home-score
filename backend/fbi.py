@@ -24,7 +24,7 @@ import httpx
 
 FBI_BASE = "https://api.usa.gov/crime/fbi/cde"
 CACHE_TTL_SECONDS = 12 * 3600
-_MAX_CONCURRENT = 5  # stay within FBI rate limits
+_MAX_CONCURRENT = 20  # api.data.gov allows ~1000 req/hour per key; 20 concurrent is safe
 
 SUPPORTED_FEATURES = {"violent_crime_rate", "property_crime_rate"}
 

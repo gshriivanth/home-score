@@ -145,6 +145,11 @@ export async function rankNeighborhoods(
 
 // ─── Gemini listing types ─────────────────────────────────────────────────────
 
+export interface ListingsResponse {
+  listings: GeminiListing[];
+  exhausted: boolean;
+}
+
 export interface GeminiListing {
   id: string;
   neighborhoodId: string;
@@ -184,7 +189,8 @@ export async function getListings(
   garage: boolean,
   pool: boolean,
   yearBuilt: string,
-): Promise<GeminiListing[]> {
+  seenIds: string[] = [],
+): Promise<ListingsResponse> {
   const response = await fetch(`${BASE_URL}/listings`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -202,6 +208,7 @@ export async function getListings(
       garage,
       pool,
       year_built: yearBuilt,
+      seen_ids: seenIds,
     }),
   });
 
@@ -210,7 +217,7 @@ export async function getListings(
     throw new Error(`Listings API ${response.status}: ${text}`);
   }
 
-  return response.json() as Promise<GeminiListing[]>;
+  return response.json() as Promise<ListingsResponse>;
 }
 
 

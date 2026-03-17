@@ -7,7 +7,8 @@ Pipeline:
        A. Large JSON blobs embedded in <script> tags (most reliable)
        B. __reactServerAgent / __reactServerState window assignments
        C. HTML home card parsing (most fragile, last resort)
-  3. Post-filter results by price range and return up to 5 listings
+  3. Post-filter results by price + sqft range, cache the full pool (up to 18)
+  4. Return 6 unseen listings per call; caller tracks seen_ids across refreshes
 """
 from __future__ import annotations
 
@@ -62,15 +63,21 @@ _listing_cache: dict[str, tuple[list, float]] = {}
 _CACHE_TTL = 3600
 
 
+_MAX_POOL_SIZE = 18   # max listings cached per ZIP+criteria (3 batches of 6)
+_BATCH_SIZE = 6
+
+
 def _cache_key(
     zip_code: str,
     bedrooms: int,
     bathrooms: float,
     min_price: int,
     max_price: int,
+    sqft_min: int,
+    sqft_max: int,
     property_type: str,
 ) -> str:
-    return f"{zip_code}|{bedrooms}|{bathrooms}|{min_price}-{max_price}|{property_type}"
+    return f"{zip_code}|{bedrooms}|{bathrooms}|{min_price}-{max_price}|{sqft_min}-{sqft_max}|{property_type}"
 
 
 def _cache_get(key: str) -> list | None:
@@ -129,9 +136,9 @@ def _build_search_url(
     property_type: str,
 ) -> str:
     """
-    Build a Redfin filter URL.
+    Build a Redfin filter URL including price, sqft, and property type.
     Example:
-      https://www.redfin.com/zipcode/90210/filter/min-beds=3,min-baths=2,min-price=500000,max-price=900000,property-type=house
+      https://www.redfin.com/zipcode/90210/filter/min-beds=3,min-baths=2,min-price=500000,max-price=900000,min-sqft=1000,max-sqft=3000,property-type=house
     """
     filters: list[str] = []
 
@@ -139,6 +146,17 @@ def _build_search_url(
         filters.append(f"min-beds={bedrooms}")
     if bathrooms > 0:
         filters.append(f"min-baths={int(bathrooms)}")
+    if min_price > 0:
+        filters.append(f"min-price={min_price}")
+    if max_price > 0:
+        filters.append(f"max-price={max_price}")
+    if sqft_min > 0:
+        filters.append(f"min-sqft={sqft_min}")
+    if sqft_max > 0:
+        filters.append(f"max-sqft={sqft_max}")
+    prop = _PROP_TYPE_MAP.get((property_type or "").lower().strip(), "")
+    if prop:
+        filters.append(f"property-type={prop}")
 
     base = f"https://www.redfin.com/zipcode/{zip_code}"
     if filters:
@@ -698,21 +716,24 @@ async def _scrape_search_results(url: str) -> list[dict]:
 # Post-processing: filter + deduplicate
 # ---------------------------------------------------------------------------
 
-def _filter_and_rank(
+def _filter_pool(
     listings: list[dict],
     bedrooms: int,
     bathrooms: float,
     min_price: int,
     max_price: int,
+    sqft_min: int,
+    sqft_max: int,
 ) -> list[dict]:
     """
-    Filter out listings outside the price range (with 10% tolerance),
-    then rank by closeness to the target bed/bath/price midpoint.
+    Strict price + sqft filter with small tolerance for scraped data inaccuracies.
+    Deduplicates by address. Returns ALL matching listings (no cap — caller limits).
     """
+    PRICE_TOL = 0.05   # 5% tolerance on price
+    SQFT_TOL  = 0.10   # 10% tolerance on sqft
     price_mid = (min_price + max_price) / 2
-    tolerance = 0.10
 
-    filtered = []
+    filtered: list[dict] = []
     seen_addresses: set[str] = set()
 
     for lst in listings:
@@ -723,35 +744,36 @@ def _filter_and_rank(
         if addr:
             seen_addresses.add(addr)
 
-        # Price filter (skip if price known and out of range + tolerance)
+        # Price filter — skip only if price is known and clearly out of range
         price = lst.get("price")
         if price:
-            lo = min_price * (1 - tolerance)
-            hi = max_price * (1 + tolerance)
-            if not (lo <= price <= hi):
+            if not (min_price * (1 - PRICE_TOL) <= price <= max_price * (1 + PRICE_TOL)):
+                continue
+
+        # Sqft filter — skip only if sqft is known and clearly out of range
+        sqft = lst.get("sqft")
+        if sqft and sqft > 0:
+            if sqft_min > 0 and sqft < sqft_min * (1 - SQFT_TOL):
+                continue
+            if sqft_max > 0 and sqft > sqft_max * (1 + SQFT_TOL):
                 continue
 
         filtered.append(lst)
 
-    # Rank by combined closeness score
-    def score(lst: dict) -> float:
+    # Sort: closest to price midpoint first; prefer listings with images/URLs
+    def _score(lst: dict) -> float:
         s = 0.0
-        price = lst.get("price") or price_mid
-        beds = lst.get("bedrooms") or bedrooms
-        baths = lst.get("bathrooms") or bathrooms
+        p = lst.get("price") or price_mid
         if price_mid > 0:
-            s -= abs(price - price_mid) / price_mid
-        s -= abs(beds - bedrooms) * 2
-        s -= abs(baths - bathrooms)
-        # Bonus for having rich data
+            s -= abs(p - price_mid) / price_mid
         if lst.get("imageUrl"):
             s += 0.5
         if lst.get("redfinUrl"):
             s += 0.3
         return s
 
-    filtered.sort(key=score, reverse=True)
-    return filtered[:5]
+    filtered.sort(key=_score, reverse=True)
+    return filtered
 
 
 # ---------------------------------------------------------------------------
@@ -772,116 +794,109 @@ async def generate_listings(
     garage: bool,
     pool: bool,
     year_built: str,
-) -> list[dict]:
+    seen_ids: list[str] | None = None,
+) -> dict:
     """
-    Returns up to 5 active for-sale listings from Redfin matching the criteria.
-    Raises RuntimeError if scraping fails entirely (no silent fallback).
+    Returns up to 6 active for-sale listings that the user hasn't seen yet.
+
+    seen_ids: list of listing IDs already shown to the user — these are excluded.
+    Returns {"listings": [...], "exhausted": bool}
+      - exhausted=True when no unseen listings remain after this batch.
+    Raises RuntimeError if no listings match the criteria at all.
     """
-    ck = _cache_key(zip_code, bedrooms, bathrooms, min_price, max_price, property_type)
-    cached = _cache_get(ck)
-    if cached is not None:
-        return cached
+    if seen_ids is None:
+        seen_ids = []
 
-    search_url = _build_search_url(
-        zip_code, bedrooms, bathrooms,
-        min_price, max_price,
-        sqft_min, sqft_max,
-        property_type,
-    )
+    ck = _cache_key(zip_code, bedrooms, bathrooms, min_price, max_price, sqft_min, sqft_max, property_type)
+    cached_pool: list[dict] | None = _cache_get(ck)
 
-    # Scrape — raises on HTTP error
-    raw = await _scrape_search_results(search_url)
-
-    # Disable filtering to see what we're actually getting
-    filtered = raw[:5]
-    # filtered = _filter_and_rank(raw, bedrooms, bathrooms, min_price, max_price)
-
-    price_mid = (min_price + max_price) // 2
-
-    # Build base results
-    results: list[dict] = []
-    for i, d in enumerate(filtered):
-        results.append({
-            "id": f"redfin-{zip_code}-{i}",
-            "neighborhoodId": zip_code,
-            "address": d.get("address") or f"{city}, {state} {zip_code}",
-            "price": d.get("price") or price_mid,
-            "bedrooms": d.get("bedrooms") or bedrooms,
-            "bathrooms": d.get("bathrooms") or bathrooms,
-            "sqft": d.get("sqft") or ((sqft_min + sqft_max) // 2),
-            "yearBuilt": d.get("yearBuilt"),
-            "propertyType": d.get("propertyType") or property_type or "House",
-            "garage": d.get("garage") if d.get("garage") is not None else garage,
-            "pool": d.get("pool") if d.get("pool") is not None else pool,
-            "redfinUrl": d.get("redfinUrl") or search_url,
-            "imageUrl": d.get("imageUrl") or _STOCK_IMAGES[i % len(_STOCK_IMAGES)],
-            "description": (
-                f"{d.get('bedrooms') or bedrooms}bd/"
-                f"{d.get('bathrooms') or bathrooms}ba in {city}, {state}"
-            ),
-            "source": "redfin",
-            "scraped": True,
-            "_raw": d,  # Keep raw data for image enhancement
-        })
-
-    # Enhance listings by scraping detail pages (parallel) — fills in
-    # images AND missing property data (bathrooms, bedrooms, sqft, yearBuilt)
-    print(f"[SCRAPE] Enhancing {len(results)} listings with detail page data...")
-
-    # Collect URLs to scrape and their indices
-    urls_to_scrape: list[tuple[int, str]] = []
-    for i, result in enumerate(results):
-        redfin_url = result["redfinUrl"]
-        # Only scrape detail pages that have real Redfin URLs (not the search URL)
-        if redfin_url and redfin_url != search_url and "/home/" in redfin_url:
-            urls_to_scrape.append((i, redfin_url))
-
-    # Scrape all detail pages in parallel
-    if urls_to_scrape:
-        scrape_tasks = [_scrape_listing_detail(url) for _, url in urls_to_scrape]
-        detail_results = await asyncio.gather(*scrape_tasks, return_exceptions=True)
-
-        # Update results with detail data where available
-        for (idx, url), detail in zip(urls_to_scrape, detail_results):
-            if isinstance(detail, Exception):
-                print(f"[SCRAPE] Error fetching detail for listing {idx}: {detail}")
-                continue
-            if not detail:
-                continue
-
-            # Fill in image
-            if detail.get("imageUrl"):
-                print(f"[SCRAPE] Found detail image for listing {idx}: {detail['imageUrl'][:80]}...")
-                results[idx]["imageUrl"] = detail["imageUrl"]
-
-            # Fill in missing property data from detail page
-            if detail.get("bathrooms") is not None:
-                results[idx]["bathrooms"] = detail["bathrooms"]
-            if detail.get("bedrooms") is not None and results[idx].get("bedrooms") == bedrooms:
-                # Only override if current value is the user-requirement fallback
-                results[idx]["bedrooms"] = detail["bedrooms"]
-            if detail.get("sqft") is not None and results[idx].get("sqft") == ((sqft_min + sqft_max) // 2):
-                results[idx]["sqft"] = detail["sqft"]
-            if detail.get("yearBuilt") is not None and results[idx].get("yearBuilt") is None:
-                results[idx]["yearBuilt"] = detail["yearBuilt"]
-
-            # Update description with real bathroom count
-            results[idx]["description"] = (
-                f"{results[idx]['bedrooms']}bd/"
-                f"{results[idx]['bathrooms']}ba in {city}, {state}"
-            )
-
-    # Clean up raw data
-    for result in results:
-        result.pop("_raw", None)
-
-    # If nothing survived filtering, raise so the caller knows
-    if not results:
-        raise RuntimeError(
-            f"No listings found matching criteria for ZIP {zip_code} "
-            f"(beds={bedrooms}, baths={bathrooms}, price={min_price}-{max_price}). "
-            f"Search URL: {search_url}"
+    if cached_pool is None:
+        search_url = _build_search_url(
+            zip_code, bedrooms, bathrooms,
+            min_price, max_price, sqft_min, sqft_max, property_type,
         )
 
-    _cache_set(ck, results)
-    return results
+        # Scrape — raises on HTTP error
+        raw = await _scrape_search_results(search_url)
+
+        # Strict filter by price + sqft
+        filtered_raw = _filter_pool(raw, bedrooms, bathrooms, min_price, max_price, sqft_min, sqft_max)
+
+        if not filtered_raw:
+            raise RuntimeError(
+                f"No listings found matching criteria for ZIP {zip_code} "
+                f"(beds≥{bedrooms}, baths≥{bathrooms}, price=${min_price:,}–${max_price:,}, "
+                f"sqft={sqft_min:,}–{sqft_max:,}). Search URL: {search_url}"
+            )
+
+        # Cap pool and assign stable IDs before enhancement
+        price_mid = (min_price + max_price) // 2
+        sqft_mid = (sqft_min + sqft_max) // 2
+        pool_raw = filtered_raw[:_MAX_POOL_SIZE]
+
+        cached_pool = []
+        for i, d in enumerate(pool_raw):
+            cached_pool.append({
+                "id": f"redfin-{zip_code}-{i}",
+                "neighborhoodId": zip_code,
+                "address": d.get("address") or f"{city}, {state} {zip_code}",
+                "price": d.get("price") or price_mid,
+                "bedrooms": d.get("bedrooms") or bedrooms,
+                "bathrooms": d.get("bathrooms") or bathrooms,
+                "sqft": d.get("sqft") or sqft_mid,
+                "yearBuilt": d.get("yearBuilt"),
+                "propertyType": d.get("propertyType") or property_type or "House",
+                "garage": d.get("garage") if d.get("garage") is not None else garage,
+                "pool": d.get("pool") if d.get("pool") is not None else pool,
+                "redfinUrl": d.get("redfinUrl") or search_url,
+                "imageUrl": d.get("imageUrl") or _STOCK_IMAGES[i % len(_STOCK_IMAGES)],
+                "description": (
+                    f"{d.get('bedrooms') or bedrooms}bd/"
+                    f"{d.get('bathrooms') or bathrooms}ba in {city}, {state}"
+                ),
+                "source": "redfin",
+            })
+
+        # Enhance all pool entries with detail pages in parallel
+        print(f"[SCRAPE] Enhancing {len(cached_pool)} pool listings with detail page data...")
+        urls_to_scrape: list[tuple[int, str]] = [
+            (i, item["redfinUrl"])
+            for i, item in enumerate(cached_pool)
+            if item["redfinUrl"] and item["redfinUrl"] != search_url and "/home/" in item["redfinUrl"]
+        ]
+
+        if urls_to_scrape:
+            scrape_tasks = [_scrape_listing_detail(url) for _, url in urls_to_scrape]
+            detail_results = await asyncio.gather(*scrape_tasks, return_exceptions=True)
+
+            for (idx, _url), detail in zip(urls_to_scrape, detail_results):
+                if isinstance(detail, Exception) or not detail:
+                    continue
+                if detail.get("imageUrl"):
+                    cached_pool[idx]["imageUrl"] = detail["imageUrl"]
+                if detail.get("bathrooms") is not None:
+                    cached_pool[idx]["bathrooms"] = detail["bathrooms"]
+                if detail.get("bedrooms") is not None and cached_pool[idx].get("bedrooms") == bedrooms:
+                    cached_pool[idx]["bedrooms"] = detail["bedrooms"]
+                if detail.get("sqft") is not None and cached_pool[idx].get("sqft") == sqft_mid:
+                    cached_pool[idx]["sqft"] = detail["sqft"]
+                if detail.get("yearBuilt") is not None and cached_pool[idx].get("yearBuilt") is None:
+                    cached_pool[idx]["yearBuilt"] = detail["yearBuilt"]
+                cached_pool[idx]["description"] = (
+                    f"{cached_pool[idx]['bedrooms']}bd/"
+                    f"{cached_pool[idx]['bathrooms']}ba in {city}, {state}"
+                )
+
+        _cache_set(ck, cached_pool)
+
+    # Return the next unseen batch
+    seen_set = set(seen_ids)
+    unseen = [l for l in cached_pool if l["id"] not in seen_set]
+
+    if not unseen:
+        return {"listings": [], "exhausted": True}
+
+    batch = unseen[:_BATCH_SIZE]
+    exhausted = len(unseen) <= _BATCH_SIZE  # nothing left after this batch
+
+    return {"listings": batch, "exhausted": exhausted}

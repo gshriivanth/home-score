@@ -47,6 +47,11 @@ _FEATURE_VARS: Dict[str, List[str]] = {
 
 SUPPORTED_FEATURES = set(_FEATURE_VARS.keys())
 
+# Fixed sorted list of every raw variable across all features — used to make a
+# single bulk API call regardless of which features the user selects.
+# This means all feature combinations share one cache entry.
+_ALL_VARS: List[str] = sorted({v for vars_list in _FEATURE_VARS.values() for v in vars_list})
+
 # Two-letter state abbreviation → Census FIPS code
 STATE_FIPS: Dict[str, str] = {
     "AL": "01", "AK": "02", "AZ": "04", "AR": "05", "CA": "06",
@@ -186,19 +191,11 @@ async def fetch_acs_data(
     -------
     {zcta_code: {feature_name: value_or_None}}
     """
-    # Collect every raw Census variable we need
-    vars_needed: List[str] = []
-    for fname in feature_names:
-        for v in _FEATURE_VARS.get(fname, []):
-            if v not in vars_needed:
-                vars_needed.append(v)
-
-    if not vars_needed:
-        return {}
-
-    var_str = ",".join(vars_needed)
-    # Cache key is national (ZCTAs don't nest under states in the Census API)
-    cache_key = f"acs|{year}|{var_str}"
+    # Always fetch ALL variables in one call so every feature combination
+    # shares the same cache entry — avoids re-downloading the 33k-ZCTA
+    # national dataset for every different priority selection.
+    var_str = ",".join(_ALL_VARS)
+    cache_key = f"acs|{year}|all"
 
     raw_rows = _cache_get(cache_key)
 
@@ -215,7 +212,7 @@ async def fetch_acs_data(
             params["key"] = api_key
 
         last_exc: Exception = RuntimeError("Census fetch failed after retries.")
-        async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(60.0)) as client:
             for attempt in range(3):
                 try:
                     resp = await client.get(url, params=params)
@@ -225,7 +222,7 @@ async def fetch_acs_data(
                 except (httpx.HTTPError, Exception) as exc:
                     last_exc = exc
                     if attempt < 2:
-                        await asyncio.sleep(1.5 ** attempt)  # 1s, 1.5s back-off
+                        await asyncio.sleep(1.5 ** attempt)
             else:
                 raise last_exc
 
@@ -246,7 +243,7 @@ async def fetch_acs_data(
             continue
 
         raw_vals: Dict[str, Optional[float]] = {}
-        for v in vars_needed:
+        for v in _ALL_VARS:
             idx = headers.index(v)
             raw_vals[v] = _parse_float(row[idx])
 

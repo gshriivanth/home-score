@@ -100,9 +100,13 @@ app.add_middleware(
 # Startup: Load appreciation model
 # ---------------------------------------------------------------------------
 
+_ZIP_LIMIT = 50  # max ZIPs scored per request — keeps FBI/NCES fetches fast
+
+
 @app.on_event("startup")
 async def startup_event():
-    """Load ML model artifacts at server startup."""
+    """Load ML model artifacts and pre-warm Census ACS cache at startup."""
+    # Load appreciation model
     try:
         model, meta = load_model_artifacts()
         app.state.appreciation_model = model
@@ -112,6 +116,21 @@ async def startup_event():
         print(f"[STARTUP] Warning: Could not load appreciation model: {e}")
         app.state.appreciation_model = None
         app.state.appreciation_meta = None
+
+    # Pre-warm ACS cache — downloads the ~33k-ZCTA national dataset once so
+    # the first user request hits the cache instead of waiting 15-30 seconds.
+    try:
+        print("[STARTUP] Pre-warming Census ACS cache (this takes ~15-30s once)...")
+        await fetch_acs_data(
+            zctas=[],
+            feature_names=list(_ACS_FEATURES),
+            state_fips="",
+            year=2022,
+            api_key=CENSUS_API_KEY,
+        )
+        print("[STARTUP] Census ACS cache ready")
+    except Exception as e:
+        print(f"[STARTUP] ACS pre-warm failed (will retry on first request): {e}")
 
 # ---------------------------------------------------------------------------
 # Shared pipeline logic
@@ -166,6 +185,11 @@ async def _run_pipeline(req: RankZipsRequest) -> tuple[list, list[str]]:
                 f"Could not resolve ZIPs for '{req.city}, {req.state}' — "
                 "fetching all state ZCTAs (may be slow; provide zip_list for speed)."
             )
+
+    # Cap to keep FBI + NCES fetch times reasonable
+    if len(zip_list) > _ZIP_LIMIT:
+        zip_list = zip_list[:_ZIP_LIMIT]
+        warnings.append(f"Capped to {_ZIP_LIMIT} ZIP codes for performance.")
 
     # Only pass ACS feature names to the Census client
     acs_feature_names = [f.name for f in req.features if f.name in _ACS_FEATURES]
@@ -458,10 +482,11 @@ class ListingRequest(BaseModel):
     garage: bool = False
     pool: bool = False
     year_built: str = "any"
+    seen_ids: List[str] = []
 
 
 @app.post("/listings", tags=["listings"])
-async def get_listing(req: ListingRequest) -> List[Dict]:
+async def get_listing(req: ListingRequest) -> Dict:
     """
     Return up to 5 active for-sale listings for the given ZIP code
     scraped from Redfin.
@@ -473,7 +498,7 @@ async def get_listing(req: ListingRequest) -> List[Dict]:
             detail="GEMINI_API_KEY not configured on the server. Add it to backend/.env.",
         )
     try:
-        listings = await generate_listings(
+        result = await generate_listings(
             zip_code=req.zip_code,
             city=req.city,
             state=req.state,
@@ -487,8 +512,9 @@ async def get_listing(req: ListingRequest) -> List[Dict]:
             garage=req.garage,
             pool=req.pool,
             year_built=req.year_built,
+            seen_ids=req.seen_ids,
         )
-        return listings
+        return result
     except ValueError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except Exception as exc:

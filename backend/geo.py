@@ -21,6 +21,9 @@ import httpx
 
 ZIPPOPOTAM_BASE = "https://api.zippopotam.us/us"
 
+# Permanent in-process cache for centroid lookups — Zippopotam data is static
+_centroid_cache: Dict[str, Optional[Tuple[float, float]]] = {}
+
 
 def _sanitise_city(city: str) -> str:
     """Lower-case and URL-safe: 'Los Angeles' → 'los%20angeles'."""
@@ -55,26 +58,31 @@ async def lookup_zips_for_city(city: str, state: str) -> Optional[List[str]]:
 async def lookup_zip_centroid(zip_code: str) -> Optional[Tuple[float, float]]:
     """
     Resolve a US ZIP code to a latitude/longitude pair using Zippopotam.us.
-    Returns (lat, lng) or None if not available.
+    Returns (lat, lng) or None if not available. Results are cached permanently.
     """
-    url = f"{ZIPPOPOTAM_BASE}/{zip_code.strip()}"
+    key = zip_code.strip()
+    if key in _centroid_cache:
+        return _centroid_cache[key]
+
+    url = f"{ZIPPOPOTAM_BASE}/{key}"
+    result: Optional[Tuple[float, float]] = None
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
             resp = await client.get(url)
-            if resp.status_code != 200:
-                return None
-            body = resp.json()
-            places = body.get("places", [])
-            if not places:
-                return None
-            place0 = places[0]
-            lat_s = place0.get("latitude")
-            lng_s = place0.get("longitude")
-            if lat_s is None or lng_s is None:
-                return None
-            return (float(lat_s), float(lng_s))
+            if resp.status_code == 200:
+                body = resp.json()
+                places = body.get("places", [])
+                if places:
+                    place0 = places[0]
+                    lat_s = place0.get("latitude")
+                    lng_s = place0.get("longitude")
+                    if lat_s is not None and lng_s is not None:
+                        result = (float(lat_s), float(lng_s))
     except (httpx.HTTPError, ValueError, TypeError, Exception):
-        return None
+        pass
+
+    _centroid_cache[key] = result
+    return result
 
 
 async def lookup_zip_centroids(zip_codes: List[str]) -> Dict[str, Tuple[float, float]]:
