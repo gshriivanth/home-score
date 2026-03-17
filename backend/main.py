@@ -15,8 +15,8 @@ Data sources
 2. FBI Crime Data Explorer — https://api.usa.gov/crime/fbi/cde
    Features: violent_crime_rate, property_crime_rate
 
-3. GreatSchools            — https://api.greatschools.org
-   Features: avg_school_rating
+3. NCES Education Data Portal — https://educationdata.urban.org/api/v1
+   Features: avg_proficiency_rate
 
 Run
 ---
@@ -66,7 +66,7 @@ from appreciation import fetch_fred_macros, load_model_artifacts, predict_scenar
 
 CENSUS_API_KEY: str = os.getenv("CENSUS_API_KEY", "")
 FBI_API_KEY: str = os.getenv("FBI_API_KEY", "")
-GREATSCHOOLS_API_KEY: str = os.getenv("GREATSCHOOLS_API_KEY", "")
+# GREATSCHOOLS_API_KEY removed — switched to NCES Education Data Portal (keyless)
 GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
 FRED_API_KEY: str = os.getenv("FRED_API_KEY", "")
 
@@ -119,11 +119,11 @@ async def startup_event():
 
 async def _run_pipeline(req: RankZipsRequest) -> tuple[list, list[str]]:
     """
-    Resolve ZIPs → fetch Census ACS + FBI CDE + GreatSchools data → score.
+    Resolve ZIPs → fetch Census ACS + FBI CDE + NCES school data → score.
     Shared by both /rank-zips and /rank-neighborhoods.
 
     Census ACS is a hard dependency (fails the request if unavailable).
-    FBI CDE and GreatSchools are soft dependencies (missing data is imputed to
+    FBI CDE and NCES are soft dependencies (missing data is imputed to
     the city mean z-score of 0 with a warning added to the response).
     """
     warnings: List[str] = []
@@ -224,10 +224,10 @@ async def _run_pipeline(req: RankZipsRequest) -> tuple[list, list[str]]:
                 f"ZIP {zcta}: no Census data for {missing} — imputed with city mean (z=0)."
             )
 
-    # --- Stage 2: FBI CDE + GreatSchools (soft fail, run concurrently) ------
+    # --- Stage 2: FBI CDE + NCES schools (soft fail, run concurrently) --------
     crime_result, school_result = await asyncio.gather(
         fetch_crime_data(scored_zctas, FBI_API_KEY, year=req.acs_year),
-        fetch_school_data(scored_zctas, GREATSCHOOLS_API_KEY),
+        fetch_school_data(scored_zctas),
         return_exceptions=True,
     )
 
@@ -240,12 +240,10 @@ async def _run_pipeline(req: RankZipsRequest) -> tuple[list, list[str]]:
             warnings.append("FBI_API_KEY not set — crime features imputed to city mean (z=0).")
 
     if isinstance(school_result, Exception):
-        warnings.append("GreatSchools API unavailable — school rating imputed to city mean (z=0).")
+        warnings.append("NCES API unavailable — school proficiency imputed to city mean (z=0).")
         school_data: Dict = {}
     else:
         school_data = school_result  # type: ignore[assignment]
-        if not GREATSCHOOLS_API_KEY:
-            warnings.append("GREATSCHOOLS_API_KEY not set — school rating imputed to city mean (z=0).")
 
     # --- Merge all feature sources into one dict per ZCTA -------------------
     for zcta in scored_zctas:
@@ -349,7 +347,7 @@ def _score_tags(score: float, all_scores: List[float], features: Dict) -> List[s
         "pct_bachelors":           "Highly educated",
         "violent_crime_rate":      "Low violent crime",
         "property_crime_rate":     "Low property crime",
-        "avg_school_rating":       "Top-rated schools",
+        "avg_proficiency_rate":    "Top-rated schools",
         "racial_diversity_index":  "Diverse community",
         "pct_households_children": "Family-friendly",
     }
@@ -587,7 +585,7 @@ async def predict_appreciation(req: AppreciationPredictionRequest) -> Appreciati
 _PRIORITY_LABELS: Dict[str, str] = {
     "violent_crime_rate":      "Safety (low violent crime)",
     "property_crime_rate":     "Safety (low property crime)",
-    "avg_school_rating":       "School quality",
+    "avg_proficiency_rate":    "School quality",
     "income":                  "Neighborhood wealth / median income",
     "commute_time":            "Short commute",
     "pct_bachelors":           "Education level (% with bachelor's degree)",
@@ -603,7 +601,7 @@ _FEATURE_LABELS: Dict[str, str] = {
     "pct_households_children": "% of Households with Children under 18",
     "violent_crime_rate":      "Violent Crime Rate (per 100,000 residents)",
     "property_crime_rate":     "Property Crime Rate (per 100,000 residents)",
-    "avg_school_rating":       "Average School Rating (1–10 scale)",
+    "avg_proficiency_rate":    "Average School Proficiency Rate (% students proficient in math + reading)",
 }
 
 _SUMMARY_SYSTEM_PROMPT = """

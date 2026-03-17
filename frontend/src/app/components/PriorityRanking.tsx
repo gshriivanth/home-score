@@ -17,7 +17,7 @@ interface Category {
 const ALL_CATEGORIES: Category[] = [
   { id: 'violent_crime_rate',      label: 'Safety',              desc: 'Violent crime rates',                 Icon: Shield },
   { id: 'property_crime_rate',     label: 'Property Security',   desc: 'Theft & property crime',              Icon: Lock },
-  { id: 'avg_school_rating',       label: 'Schools',             desc: 'School quality & ratings',            Icon: GraduationCap },
+  { id: 'avg_proficiency_rate',    label: 'Schools',             desc: 'School quality & ratings',            Icon: GraduationCap },
   { id: 'income',                  label: 'Neighborhood Wealth', desc: 'Median household income',             Icon: TrendingUp },
   { id: 'commute_time',            label: 'Commute',             desc: 'Travel time to work',                 Icon: Car },
   { id: 'pct_bachelors',           label: 'Education Level',     desc: 'Share of college-educated residents', Icon: BookOpen },

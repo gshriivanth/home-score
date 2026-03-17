@@ -1,17 +1,20 @@
 """
-GreatSchools API async client.
+NCES Education Data Portal async client (Urban Institute wrapper over NCES CCD/EdFacts).
 
-Fetches school ratings by ZIP code and returns the average rating across all
-nearby schools (elementary, middle, and high school combined).
+Fetches school proficiency rates by ZIP code from the EdFacts assessments endpoint
+and returns the average math + reading proficiency rate across all schools in the ZIP.
 
-Base URL: https://api.greatschools.org
-Endpoint: /schools/nearby?zip={zip}&key={key}&limit=20&levelCode=e,m,h
+No API key required. National coverage (~27k ZIPs with data).
 
-Response shape: list of school objects, each containing a "rating" field (1–10 scale).
+Base URL : https://educationdata.urban.org/api/v1
+Endpoint : /schools/edfacts/assessments/{year}/grades/99/subjects/{subject}/
+             ?zip_mailing={zip}&per_page=100
 
 Derived features
 ----------------
-avg_school_rating — mean GreatSchools rating (1–10) across nearby schools (higher_is_better)
+avg_proficiency_rate — mean % of students proficient in math + reading across nearby
+                       public schools (0–100, higher_is_better). Sourced from EdFacts
+                       assessment data (most recent available year ≤ 2022).
 """
 from __future__ import annotations
 
@@ -21,11 +24,14 @@ from typing import Dict, List, Optional, Tuple
 
 import httpx
 
-GREATSCHOOLS_BASE = "https://api.greatschools.org"
-CACHE_TTL_SECONDS = 12 * 3600
-_MAX_CONCURRENT = 5  # stay within GreatSchools rate limits
+NCES_BASE = "https://educationdata.urban.org/api/v1"
+# EdFacts assessment years available; try most recent first and fall back
+_ASSESSMENT_YEARS = [2022, 2021, 2019]
+_SUBJECTS = ["mth", "rla"]  # math and reading/language arts
+CACHE_TTL_SECONDS = 24 * 3600  # NCES data is static — cache for 24h
+_MAX_CONCURRENT = 8  # Urban Institute allows reasonable concurrency
 
-SUPPORTED_FEATURES = {"avg_school_rating"}
+SUPPORTED_FEATURES = {"avg_proficiency_rate"}
 
 _cache: Dict[str, Tuple[object, float]] = {}
 
@@ -45,77 +51,96 @@ def _cache_set(key: str, data: object) -> None:
     _cache[key] = (data, time.monotonic())
 
 
+async def _fetch_proficiency_for_zip(
+    client: httpx.AsyncClient,
+    zcta: str,
+    year: int,
+) -> Optional[float]:
+    """
+    Fetch avg math + reading proficiency for one ZIP from EdFacts.
+    Returns a float 0–100, or None if no data is available.
+    """
+    all_pct: List[float] = []
+
+    for subject in _SUBJECTS:
+        url = f"{NCES_BASE}/schools/edfacts/assessments/{year}/grades/99/subjects/{subject}/"
+        params: Dict[str, object] = {
+            "zip_mailing": zcta,
+            "per_page": 100,
+        }
+        try:
+            resp = await client.get(url, params=params)
+            if resp.status_code != 200:
+                continue
+            body = resp.json()
+        except (httpx.HTTPError, Exception):
+            continue
+
+        for school in body.get("results", []):
+            val = school.get("pct_prof_midpt")
+            if val is not None:
+                try:
+                    f = float(val)
+                    if 0.0 <= f <= 100.0:
+                        all_pct.append(f)
+                except (TypeError, ValueError):
+                    pass
+
+    if not all_pct:
+        return None
+    return round(sum(all_pct) / len(all_pct), 2)
+
+
 async def _fetch_zip(
     client: httpx.AsyncClient,
     sem: asyncio.Semaphore,
     zcta: str,
-    api_key: str,
 ) -> Tuple[str, Dict[str, Optional[float]]]:
-    """Fetch school data for one ZIP and return (zcta, features)."""
-    cache_key = f"schools|{zcta}"
+    """Fetch school proficiency for one ZIP and return (zcta, features)."""
+    cache_key = f"nces|{zcta}"
     cached = _cache_get(cache_key)
     if cached is not None:
         return zcta, cached  # type: ignore[return-value]
 
-    url = f"{GREATSCHOOLS_BASE}/schools/nearby"
-    params: Dict[str, object] = {
-        "zip": zcta,
-        "key": api_key,
-        "limit": 20,
-        "levelCode": "e,m,h",  # elementary, middle, high
-    }
-
     async with sem:
-        try:
-            resp = await client.get(url, params=params)
-            if resp.status_code != 200:
-                result: Dict[str, Optional[float]] = {"avg_school_rating": None}
-                _cache_set(cache_key, result)
-                return zcta, result
-            body = resp.json()
-        except (httpx.HTTPError, Exception):
-            return zcta, {"avg_school_rating": None}
+        # Try years from most recent to oldest; stop on first year with data
+        avg_pct: Optional[float] = None
+        for year in _ASSESSMENT_YEARS:
+            avg_pct = await _fetch_proficiency_for_zip(client, zcta, year)
+            if avg_pct is not None:
+                break
 
-    # Response may be a top-level list or nested under "schools"
-    schools: List[Dict] = body if isinstance(body, list) else body.get("schools", [])
-
-    ratings = [
-        float(s["rating"])
-        for s in schools
-        if s.get("rating") is not None
-    ]
-    avg_rating = round(sum(ratings) / len(ratings), 4) if ratings else None
-
-    result = {"avg_school_rating": avg_rating}
+    result: Dict[str, Optional[float]] = {"avg_proficiency_rate": avg_pct}
     _cache_set(cache_key, result)
     return zcta, result
 
 
 async def fetch_school_data(
     zctas: List[str],
-    api_key: str,
+    api_key: str = "",  # unused — NCES requires no key; kept for interface compatibility
 ) -> Dict[str, Dict[str, Optional[float]]]:
     """
-    Fetch GreatSchools ratings for a list of ZIP codes.
+    Fetch NCES EdFacts proficiency rates for a list of ZIP codes.
 
     Parameters
     ----------
     zctas   : ZIP code strings to fetch
-    api_key : GreatSchools API key (required; returns None features when empty)
+    api_key : ignored (NCES Education Data Portal is keyless)
 
     Returns
     -------
-    {zcta: {"avg_school_rating": float|None}}
+    {zcta: {"avg_proficiency_rate": float|None}}
 
-    Rating is the mean GreatSchools score (1–10) across all nearby schools.
-    Missing values are left as None so scoring.py imputes them to the city mean (z=0).
+    Value is the mean % of students proficient in math + reading (0–100) across
+    all public schools in the ZIP. None when no EdFacts data exists for that ZIP;
+    scoring.py imputes those to the city mean (z=0).
     """
-    if not zctas or not api_key:
-        return {z: {"avg_school_rating": None} for z in zctas}
+    if not zctas:
+        return {}
 
     sem = asyncio.Semaphore(_MAX_CONCURRENT)
-    async with httpx.AsyncClient(timeout=httpx.Timeout(15.0)) as client:
-        tasks = [_fetch_zip(client, sem, z, api_key) for z in zctas]
+    async with httpx.AsyncClient(timeout=httpx.Timeout(20.0)) as client:
+        tasks = [_fetch_zip(client, sem, z) for z in zctas]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
     out: Dict[str, Dict[str, Optional[float]]] = {}

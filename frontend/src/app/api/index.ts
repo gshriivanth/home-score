@@ -17,7 +17,7 @@ const BASE_URL: string =
 const FEATURE_DIRECTION: Record<string, boolean> = {
   violent_crime_rate: false,  // lower violent crime is better
   property_crime_rate: false,  // lower property crime is better
-  avg_school_rating: true,   // higher school rating is better
+  avg_proficiency_rate: true,   // higher proficiency rate is better
   income: true,   // higher income is better
   commute_time: false,  // lower commute time is better
   pct_bachelors: true,   // higher education share is better
